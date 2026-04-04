@@ -1,0 +1,17 @@
+{
+  "name": "@openoutlier/mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.24.0",
+    "@openoutlier/sdk": "*",
+    "zod": "^4.1.11"
+  }
+}

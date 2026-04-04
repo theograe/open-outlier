@@ -1,0 +1,553 @@
+openapi: 3.1.0
+info:
+  title: OpenOutlier API
+  version: 1.0.0
+  description: |
+    Agent-first API for project-based YouTube outlier research, concept generation, and thumbnail generation.
+servers:
+  - url: http://localhost:3001
+    description: Local development
+security:
+  - ApiKeyAuth: []
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+  schemas:
+    Project:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        niche: { type: [string, "null"] }
+        status: { type: string }
+        primaryChannelId: { type: [string, "null"] }
+        primaryChannelName: { type: [string, "null"] }
+        sourceSetCount: { type: integer }
+        referenceCount: { type: integer }
+        workflowRunCount: { type: integer }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+    ProjectDetail:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        niche: { type: [string, "null"] }
+        primaryChannelId: { type: [string, "null"] }
+        status: { type: string }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+        sourceSets:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceSetSummary'
+        references:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reference'
+    SourceSetSummary:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        role: { type: string }
+        discoveryMode: { type: string }
+        backingListId: { type: [integer, "null"] }
+        channelCount: { type: integer }
+    SourceSetDetail:
+      type: object
+      properties:
+        id: { type: integer }
+        projectId: { type: integer }
+        backingListId: { type: [integer, "null"] }
+        name: { type: string }
+        role: { type: string }
+        discoveryMode: { type: string }
+        channels:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              handle: { type: [string, "null"] }
+              subscriberCount: { type: [integer, "null"] }
+              thumbnailUrl: { type: [string, "null"] }
+    Reference:
+      type: object
+      properties:
+        id: { type: integer }
+        sourceSetId: { type: [integer, "null"] }
+        videoId: { type: string }
+        title: { type: string }
+        thumbnailUrl: { type: [string, "null"] }
+        channelName: { type: string }
+        kind: { type: string }
+        notes: { type: [string, "null"] }
+        tags:
+          type: array
+          items: { type: string }
+        outlierScore: { type: number }
+        viewVelocity: { type: number }
+        createdAt: { type: string }
+    WorkflowRun:
+      type: object
+      properties:
+        id: { type: integer }
+        projectId: { type: integer }
+        sourceSetId: { type: [integer, "null"] }
+        mode: { type: string, enum: [manual, copilot, auto] }
+        status: { type: string }
+        currentStage: { type: string }
+        targetNiche: { type: [string, "null"] }
+        targetChannelId: { type: [string, "null"] }
+        input: { type: object, additionalProperties: true }
+        output: { type: object, additionalProperties: true }
+        lastError: { type: [string, "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+        completedAt: { type: [string, "null"] }
+    ConceptRun:
+      type: object
+      properties:
+        id: { type: integer }
+        model: { type: [string, "null"] }
+        concept:
+          type: object
+          additionalProperties: true
+    ThumbnailGeneration:
+      type: object
+      properties:
+        id: { type: integer }
+        status: { type: string }
+        prompt: { type: string }
+        sourceVideoIds:
+          type: array
+          items: { type: string }
+        resultUrls:
+          type: array
+          items: { type: string }
+        downloadUrls:
+          type: array
+          items: { type: string }
+paths:
+  /api/health:
+    get:
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: OK
+  /api/projects:
+    get:
+      summary: List projects
+      responses:
+        '200':
+          description: Project list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+    post:
+      summary: Create project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                niche: { type: [string, "null"] }
+                primaryChannelInput: { type: [string, "null"] }
+                competitorSourceSetName: { type: [string, "null"] }
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectDetail'
+  /api/projects/{id}:
+    get:
+      summary: Get project detail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Project detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectDetail'
+  /api/projects/{id}/source-sets:
+    get:
+      summary: List source sets for a project
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Source sets
+    post:
+      summary: Create source set
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                role: { type: string }
+                discoveryMode: { type: string }
+      responses:
+        '201':
+          description: Source set created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceSetDetail'
+  /api/source-sets/{id}:
+    get:
+      summary: Get source set detail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Source set detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceSetDetail'
+  /api/source-sets/{id}/channels:
+    post:
+      summary: Attach channel to source set
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                channelUrl: { type: string }
+                channelId: { type: string }
+                handle: { type: string }
+                relationship: { type: string }
+      responses:
+        '201':
+          description: Channel attached
+  /api/source-sets/{id}/discover:
+    post:
+      summary: Discover competitor channels for a source set
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query: { type: string }
+                niche: { type: string }
+                limit: { type: integer }
+                autoAttach: { type: boolean }
+      responses:
+        '200':
+          description: Discovery results
+  /api/projects/{id}/references/search:
+    post:
+      summary: Search discover data and optionally save references
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sourceSetId: { type: integer }
+                search: { type: string }
+                contentType: { type: string, enum: [all, long, short] }
+                days: { type: integer }
+                sort: { type: string, enum: [score, views, date, velocity, momentum] }
+                order: { type: string, enum: [asc, desc] }
+                limit: { type: integer }
+                minScore: { type: number }
+                maxScore: { type: number }
+                saveTop: { type: integer }
+      responses:
+        '200':
+          description: Reference search results
+  /api/projects/{id}/references:
+    get:
+      summary: List project references
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Reference list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Reference'
+    post:
+      summary: Save project reference
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [videoId]
+              properties:
+                sourceSetId: { type: [integer, "null"] }
+                videoId: { type: string }
+                kind: { type: string }
+                notes: { type: [string, "null"] }
+                tags:
+                  type: array
+                  items: { type: string }
+      responses:
+        '201':
+          description: Reference saved
+  /api/projects/{id}/references/import-video:
+    post:
+      summary: Import a seed video directly
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sourceSetId: { type: [integer, "null"] }
+                videoId: { type: [string, "null"] }
+                videoUrl: { type: [string, "null"] }
+      responses:
+        '201':
+          description: Video imported
+  /api/projects/{id}/concepts:
+    get:
+      summary: List concept runs
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Concept runs
+  /api/projects/{id}/concepts/generate:
+    post:
+      summary: Generate grounded concept
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                referenceIds:
+                  type: array
+                  items: { type: integer }
+                context: { type: string }
+                providerId: { type: integer }
+      responses:
+        '201':
+          description: Concept generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConceptRun'
+  /api/projects/{id}/thumbnails/generate:
+    post:
+      summary: Generate thumbnail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                referenceIds:
+                  type: array
+                  items: { type: integer }
+                prompt: { type: string }
+                context: { type: string }
+                characterProfileId: { type: [integer, "null"] }
+                size: { type: string, enum: ['16:9', '3:2', '1:1', '2:3'] }
+      responses:
+        '201':
+          description: Thumbnail generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThumbnailGeneration'
+  /api/projects/{id}/workflow-runs:
+    get:
+      summary: List workflow runs for a project
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Workflow runs
+  /api/workflow-runs:
+    post:
+      summary: Create workflow run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [projectId]
+              properties:
+                projectId: { type: integer }
+                sourceSetId: { type: [integer, "null"] }
+                mode: { type: string, enum: [auto, copilot, manual] }
+                targetNiche: { type: [string, "null"] }
+                targetChannelId: { type: [string, "null"] }
+                startStage: { type: string, enum: [source_discovery, reference_research, concept_adaptation, thumbnail_creation] }
+                stopAfterStage: { type: [string, "null"], enum: [source_discovery, reference_research, concept_adaptation, thumbnail_creation, null] }
+                referenceIds:
+                  type: array
+                  items: { type: integer }
+                seedVideoId: { type: [string, "null"] }
+                seedVideoUrl: { type: [string, "null"] }
+                input:
+                  type: object
+                  additionalProperties: true
+                runImmediately: { type: boolean }
+      responses:
+        '201':
+          description: Workflow run created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRun'
+  /api/workflow-runs/run-auto:
+    post:
+      summary: Create and immediately execute autonomous workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [projectId]
+              properties:
+                projectId: { type: integer }
+                sourceSetId: { type: [integer, "null"] }
+                targetNiche: { type: [string, "null"] }
+                targetChannelId: { type: [string, "null"] }
+                startStage: { type: string, enum: [source_discovery, reference_research, concept_adaptation, thumbnail_creation] }
+                stopAfterStage: { type: [string, "null"], enum: [source_discovery, reference_research, concept_adaptation, thumbnail_creation, null] }
+                referenceIds:
+                  type: array
+                  items: { type: integer }
+                seedVideoId: { type: [string, "null"] }
+                seedVideoUrl: { type: [string, "null"] }
+                input:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '201':
+          description: Workflow run completed or advanced
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRun'
+  /api/workflow-runs/{id}:
+    get:
+      summary: Get workflow run
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Workflow run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRun'
+  /api/workflow-runs/{id}/advance:
+    post:
+      summary: Advance workflow run
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Workflow advanced
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRun'

@@ -15,6 +15,7 @@
     "@fastify/cors": "^11.1.0",
     "@fastify/multipart": "^9.4.0",
     "@fastify/sensible": "^6.0.3",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@openoutlier/core": "*",
     "@openoutlier/storage": "*",
     "dotenv": "^17.2.3",

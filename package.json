@@ -7,7 +7,7 @@
     "dev": "concurrently -n api,web -c cyan,yellow \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "npm run dev -w @openoutlier/api",
     "dev:web": "npm run dev -w @openoutlier/web",
-    "build": "npm run build -w @openoutlier/core && npm run build -w @openoutlier/storage && npm run build -w @openoutlier/api && npm run build -w @openoutlier/web",
+    "build": "npm run build -w @openoutlier/core && npm run build -w @openoutlier/storage && npm run build -w @openoutlier/sdk && npm run build -w @openoutlier/api && npm run build -w @openoutlier/mcp && npm run build -w @openoutlier/web",
     "lint": "npm run lint -w @openoutlier/api && npm run lint -w @openoutlier/web",
     "test": "npm run test -w @openoutlier/core && npm run test -w @openoutlier/api"
   },
