@@ -1,0 +1,17 @@
+{
+  "name": "@openoutlier/web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "lint": "eslint app components lib --ext .ts,.tsx"
+  },
+  "dependencies": {
+    "next": "^15.5.5",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  }
+}

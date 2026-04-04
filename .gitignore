@@ -1,5 +1,9 @@
 node_modules
 dist
+apps/*/.next
+apps/*/dist
+packages/*/dist
 .env
+.env.local
 data
 .DS_Store
