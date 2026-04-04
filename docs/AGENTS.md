@@ -196,13 +196,21 @@ That means OpenOutlier is already usable as:
 - a future SDK backend
 - a future MCP tool server backend
 
-## Next packaging layers
+## Current packaging layers
 
-The intended packaging order is:
+OpenOutlier now ships with:
 
 1. REST API
 2. OpenAPI spec
-3. typed SDK
+3. typed TypeScript SDK
 4. MCP server
+5. CLI agent
+
+Use the layer that matches your integration:
+
+- direct HTTP for custom agents
+- SDK for code integrations
+- MCP for tool-using agents
+- CLI for scripts and automation
 
 The OpenAPI spec lives in [openapi.yaml](openapi.yaml).

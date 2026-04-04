@@ -38,6 +38,14 @@ List projects with summary counts.
 
 Return one project with source sets, references, and concept summaries.
 
+### `GET /api/projects/:id/workflow-runs`
+
+List workflow runs for a project.
+
+### `GET /api/projects/:id/thumbnail-generations`
+
+List thumbnail generations for a project.
+
 ## Source sets
 
 ### `POST /api/projects/:id/source-sets`
@@ -152,6 +160,35 @@ Generate a thumbnail from reference context.
 }
 ```
 
+### `GET /api/thumbnails/generations?projectId=:id`
+
+List thumbnail generations, optionally scoped to a project.
+
+## Boards
+
+### `GET /api/boards?projectId=:id`
+
+List boards for a project.
+
+### `POST /api/boards`
+
+Create a board, optionally attached to a project.
+
+```json
+{
+  "projectId": 1,
+  "name": "High CTR packaging"
+}
+```
+
+### `GET /api/boards/:id`
+
+Read one board and its items.
+
+### `POST /api/boards/:id/items`
+
+Add a video to a board.
+
 ## Workflow runs
 
 ### `POST /api/workflow-runs`
@@ -206,4 +243,4 @@ These remain available during the migration:
 - `/api/channels/:id`
 - `/api/scan/*`
 
-They are still useful for the current UI, but new integrations should prefer projects, source sets, references, concepts, and workflow runs.
+They are still useful for older integrations, but new integrations should prefer projects, source sets, references, concepts, boards, thumbnail generations, and workflow runs.

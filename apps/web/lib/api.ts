@@ -1,9 +1,12 @@
 "use client";
 
 const API_URL = process.env.NEXT_PUBLIC_OPENOUTLIER_API_URL ?? "http://localhost:3001";
-const API_KEY = process.env.NEXT_PUBLIC_OPENOUTLIER_API_KEY ?? "local-dev";
+const API_KEY = process.env.NEXT_PUBLIC_OPENOUTLIER_API_KEY;
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  if (!API_KEY) {
+    throw new Error("Missing NEXT_PUBLIC_OPENOUTLIER_API_KEY.");
+  }
   const isFormData = typeof FormData !== "undefined" && init?.body instanceof FormData;
   const response = await fetch(`${API_URL}${path}`, {
     ...init,

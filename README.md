@@ -108,7 +108,7 @@ MCP configuration snippets live in [docs/MCP.md](docs/MCP.md).
 
 ## Packaging for agents
 
-OpenOutlier can now be consumed three ways:
+OpenOutlier can now be consumed four ways:
 
 - direct REST API
 - the typed TypeScript SDK in `packages/sdk`

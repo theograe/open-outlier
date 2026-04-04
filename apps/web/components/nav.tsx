@@ -17,10 +17,9 @@ export function AppNav() {
   return (
     <aside className="nav">
       <div className="brand">
-        <div className="brand-mark" />
         <div>
           <div style={{ fontWeight: 700 }}>OpenOutlier</div>
-          <div className="subtle" style={{ fontSize: 13 }}>Research cockpit</div>
+          <div className="subtle" style={{ fontSize: 13 }}>Agent-first research</div>
         </div>
       </div>
 

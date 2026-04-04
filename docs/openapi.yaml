@@ -122,6 +122,7 @@ components:
       type: object
       properties:
         id: { type: integer }
+        projectId: { type: [integer, "null"] }
         status: { type: string }
         prompt: { type: string }
         sourceVideoIds:
@@ -133,6 +134,24 @@ components:
         downloadUrls:
           type: array
           items: { type: string }
+    Board:
+      type: object
+      properties:
+        id: { type: integer }
+        project_id: { type: [integer, "null"] }
+        name: { type: string }
+        description: { type: [string, "null"] }
+        itemCount: { type: integer }
+    Channel:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        handle: { type: [string, "null"] }
+        subscriber_count: { type: [integer, "null"] }
+        video_count: { type: integer }
+        top_outlier_score: { type: [number, "null"] }
+        average_views: { type: [number, "null"] }
 paths:
   /api/health:
     get:
@@ -449,6 +468,103 @@ paths:
       responses:
         '200':
           description: Workflow runs
+  /api/projects/{id}/thumbnail-generations:
+    get:
+      summary: List thumbnail generations for a project
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Thumbnail generations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ThumbnailGeneration'
+  /api/boards:
+    get:
+      summary: List boards, optionally scoped to a project
+      parameters:
+        - in: query
+          name: projectId
+          required: false
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Boards
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Board'
+    post:
+      summary: Create board
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                projectId: { type: [integer, "null"] }
+                name: { type: string }
+                description: { type: [string, "null"] }
+      responses:
+        '201':
+          description: Board created
+  /api/boards/{id}:
+    get:
+      summary: Get board detail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Board detail
+  /api/boards/{id}/items:
+    post:
+      summary: Add item to board
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [videoId]
+              properties:
+                videoId: { type: string }
+                note: { type: [string, "null"] }
+      responses:
+        '201':
+          description: Board item created
+  /api/channels/{id}:
+    get:
+      summary: Get channel detail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Channel detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Channel'
   /api/workflow-runs:
     post:
       summary: Create workflow run
