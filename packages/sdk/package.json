@@ -1,10 +1,16 @@
 {
   "name": "@openoutlier/sdk",
   "version": "1.0.0",
-  "private": true,
+  "description": "Typed TypeScript client for the OpenOutlier workflow API",
+  "license": "MIT",
+  "author": "Theo Graeser",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -13,5 +19,24 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json"
-  }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/theograe/outlier-api.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://github.com/theograe/outlier-api",
+  "bugs": {
+    "url": "https://github.com/theograe/outlier-api/issues"
+  },
+  "keywords": [
+    "openoutlier",
+    "youtube",
+    "sdk",
+    "agents",
+    "mcp"
+  ]
 }

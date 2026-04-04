@@ -34,6 +34,7 @@ Legacy compatibility routes like `/api/lists` and `/api/feed` still exist for ba
 ## Workspace layout
 
 - `apps/api`: Fastify API, scan scheduler, workflow orchestration, AI/image integrations
+- `apps/cli`: tiny CLI agent for scripted OpenOutlier workflows
 - `apps/mcp`: MCP server exposing OpenOutlier as tools over stdio
 - `apps/web`: local Next.js interface
 - `packages/core`: scoring, similarity, prompt grounding, shared domain logic
@@ -103,6 +104,7 @@ More endpoint detail and example payloads live in [docs/API.md](docs/API.md).
 Agent usage guidance lives in [docs/AGENTS.md](docs/AGENTS.md).
 The machine-readable API contract lives in [docs/openapi.yaml](docs/openapi.yaml).
 Runnable integration examples live in [examples/agent-js.mjs](examples/agent-js.mjs) and [examples/agent-python.py](examples/agent-python.py).
+MCP configuration snippets live in [docs/MCP.md](docs/MCP.md).
 
 ## Packaging for agents
 
@@ -111,6 +113,7 @@ OpenOutlier can now be consumed three ways:
 - direct REST API
 - the typed TypeScript SDK in `packages/sdk`
 - the MCP server in `apps/mcp`
+- the CLI agent in `apps/cli`
 
 The MCP server uses:
 
