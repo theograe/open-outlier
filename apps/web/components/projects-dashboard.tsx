@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
 
@@ -15,6 +16,7 @@ export type ProjectSummary = {
 };
 
 export function ProjectsDashboard({ initialProjects = [], mode = "projects" }: { initialProjects?: ProjectSummary[]; mode?: "projects" | "collections" }) {
+  const router = useRouter();
   const [projects, setProjects] = useState<ProjectSummary[]>(initialProjects);
   const [error, setError] = useState<string | null>(null);
   const [deletingProjectId, setDeletingProjectId] = useState<number | null>(null);
@@ -45,6 +47,7 @@ export function ProjectsDashboard({ initialProjects = [], mode = "projects" }: {
         method: "DELETE",
       });
       setProjects((current) => current.filter((project) => project.id !== projectId));
+      router.refresh();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : `Failed to delete ${singular}.`);
     } finally {
@@ -59,7 +62,7 @@ export function ProjectsDashboard({ initialProjects = [], mode = "projects" }: {
           <div className="eyebrow">{plural}</div>
           <h1 className="headline">{plural}</h1>
         </div>
-        <Link className="button" href={`${basePath}/new`}>{mode === "collections" ? "New collection" : "New project"}</Link>
+        {mode === "collections" ? null : <Link className="button" href={`${basePath}/new`}>New project</Link>}
       </header>
 
       {error ? <section className="panel">{error}</section> : null}
@@ -71,7 +74,15 @@ export function ProjectsDashboard({ initialProjects = [], mode = "projects" }: {
               <button
                 type="button"
                 className="project-card-delete"
-                onClick={() => void deleteProject(project.id, project.name)}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void deleteProject(project.id, project.name);
+                }}
                 disabled={deletingProjectId === project.id}
                 aria-label={`Delete ${project.name}`}
               >
@@ -91,17 +102,6 @@ export function ProjectsDashboard({ initialProjects = [], mode = "projects" }: {
                   <strong className="project-card-title">{project.name}</strong>
                   <span className="pill">{project.referenceCount} saved</span>
                 </div>
-                <div className="project-card-niche">{project.niche ?? "No niche yet"}</div>
-                <div className="project-card-meta-stack">
-                  <div className="project-card-meta-row">
-                    <span className="subtle">Primary channel</span>
-                    <span>{project.primaryChannelName ?? "None yet"}</span>
-                  </div>
-                  <div className="project-card-meta-row">
-                    <span className="subtle">{mode === "collections" ? "Saved videos" : "Tracked channels"}</span>
-                    <span>{mode === "collections" ? project.referenceCount : project.channelCount}</span>
-                  </div>
-                </div>
               </div>
             </Link>
           </article>
@@ -110,7 +110,7 @@ export function ProjectsDashboard({ initialProjects = [], mode = "projects" }: {
         <Link href={`${basePath}/new`} className="project-card project-card-new">
           <span className="project-plus">+</span>
           <strong>{mode === "collections" ? "New collection" : "New project"}</strong>
-          <span className="subtle">{mode === "collections" ? "Create a new saved-video collection" : "Create a new niche tracker"}</span>
+          {mode === "collections" ? null : <span className="subtle">Create a new niche tracker</span>}
         </Link>
       </section>
 

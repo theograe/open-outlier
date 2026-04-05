@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -7,7 +8,7 @@ const links = [
   { href: "/discover", label: "Browse" },
   { href: "/tracked-channels", label: "Tracked Channels" },
   { href: "/collections", label: "Collections" },
-  { href: "/settings", label: "Connections" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export function AppNav() {
@@ -16,10 +17,14 @@ export function AppNav() {
   return (
     <aside className="nav">
       <div className="brand">
-        <div>
-          <div style={{ fontWeight: 700 }}>OpenOutlier</div>
-          <div className="subtle" style={{ fontSize: 13 }}>Find and save outliers</div>
-        </div>
+        <Image
+          src="/openoutlier-logo.png"
+          alt="OpenOutlier"
+          width={172}
+          height={172}
+          className="brand-image"
+          priority
+        />
       </div>
 
       <nav className="nav-links">

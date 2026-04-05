@@ -1,6 +1,6 @@
 import { computeMomentumScore, getContentType, getScoreBand, parseDurationToSeconds, similarityScore, titleFormat, tokenizeTitle } from "@openoutlier/core";
 import imghash from "imghash";
-import { db, getSetting } from "../db.js";
+import { db, getSetting, upsertSetting } from "../db.js";
 import { EmbeddingsService } from "./embeddings-service.js";
 import { YoutubeClient } from "./youtube.js";
 import { isoNow, median, subtractDays } from "../utils.js";
@@ -9,7 +9,9 @@ export type DiscoverQuery = {
   listId?: number;
   projectId?: number;
   seedChannelId?: string;
+  trackedMode?: boolean;
   generalMode?: boolean;
+  includeAdjacent?: boolean;
   excludeProjectSaved?: boolean;
   channelScope?: "all" | "tracked" | "adjacent";
   minScore?: number;
@@ -36,12 +38,41 @@ const embeddingsService = new EmbeddingsService();
 const youtubeClient = new YoutubeClient();
 const THUMBNAIL_HASH_BITS = 16;
 const SEED_DISCOVERY_TTL_MS = 1000 * 60 * 60 * 6;
+const SEARCH_REFRESH_TTL_MS = 1000 * 60 * 60 * 12;
+const SIMILAR_REFRESH_TTL_MS = 1000 * 60 * 60 * 12;
 const seedDiscoveryCache = new Map<string, number>();
 const seedProfileCache = new Map<string, { cachedAt: number; queryText: string; queries: string[] }>();
 const orderMap = {
   asc: "ASC",
   desc: "DESC",
 } as const;
+
+function warmThumbnailHashes(
+  videos: Array<{ id: string; thumbnailUrl: string | null | undefined }>,
+  limit = 40,
+): void {
+  const queued: Array<{ id: string; thumbnailUrl: string }> = [];
+  const seen = new Set<string>();
+
+  for (const video of videos) {
+    if (!video.id || !video.thumbnailUrl || seen.has(video.id)) {
+      continue;
+    }
+    seen.add(video.id);
+    queued.push({ id: video.id, thumbnailUrl: video.thumbnailUrl });
+    if (queued.length >= limit) {
+      break;
+    }
+  }
+
+  if (queued.length === 0) {
+    return;
+  }
+
+  void Promise.allSettled(
+    queued.map((video) => ensureThumbnailHash(video.id, video.thumbnailUrl)),
+  );
+}
 
 const CHANNEL_QUERY_STOPWORDS = new Set([
   "the",
@@ -87,11 +118,83 @@ function normalizeSearchText(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function cacheKeyPart(value: string): string {
+  return Buffer.from(value).toString("base64url").slice(0, 160);
+}
+
+function isRefreshDue(key: string, ttlMs: number): boolean {
+  const stored = getSetting(key);
+  if (!stored) {
+    return true;
+  }
+
+  const ageMs = Date.now() - new Date(stored).getTime();
+  return !Number.isFinite(ageMs) || ageMs >= ttlMs;
+}
+
+function markRefreshed(key: string): void {
+  upsertSetting(key, isoNow());
+}
+
 function tokenizeSearchQuery(value: string): string[] {
   return normalizeSearchText(value)
     .split(" ")
     .map((token) => token.trim())
     .filter((token) => token.length >= 2);
+}
+
+export function dismissVideo(videoId: string): void {
+  db.prepare(`
+    INSERT INTO dismissed_videos (video_id)
+    VALUES (?)
+    ON CONFLICT(video_id) DO NOTHING
+  `).run(videoId);
+}
+
+export function shouldRefreshSearchQuery(searchText: string): boolean {
+  const normalized = normalizeSearchText(searchText);
+  if (!normalized) {
+    return false;
+  }
+  return isRefreshDue(`search_refresh:${cacheKeyPart(normalized)}`, SEARCH_REFRESH_TTL_MS);
+}
+
+export function markSearchQueryRefreshed(searchText: string): void {
+  const normalized = normalizeSearchText(searchText);
+  if (!normalized) {
+    return;
+  }
+  markRefreshed(`search_refresh:${cacheKeyPart(normalized)}`);
+}
+
+export function shouldRefreshSeedChannelDiscovery(seedChannelId: string, days: number): boolean {
+  return isRefreshDue(`seed_refresh:${seedChannelId}:${days}`, SEED_DISCOVERY_TTL_MS);
+}
+
+export function markSeedChannelDiscoveryRefreshed(seedChannelId: string, days: number): void {
+  markRefreshed(`seed_refresh:${seedChannelId}:${days}`);
+}
+
+export function shouldRefreshTrackedChannelDiscovery(days: number): boolean {
+  const trackedChannelIds = (
+    db.prepare("SELECT channel_id FROM tracked_channels ORDER BY channel_id ASC").all() as Array<{ channel_id: string }>
+  ).map((row) => row.channel_id);
+  return isRefreshDue(`tracked_refresh:${cacheKeyPart(`${days}:${trackedChannelIds.join(",")}`)}`, SEED_DISCOVERY_TTL_MS);
+}
+
+export function markTrackedChannelDiscoveryRefreshed(days: number): void {
+  const trackedChannelIds = (
+    db.prepare("SELECT channel_id FROM tracked_channels ORDER BY channel_id ASC").all() as Array<{ channel_id: string }>
+  ).map((row) => row.channel_id);
+  markRefreshed(`tracked_refresh:${cacheKeyPart(`${days}:${trackedChannelIds.join(",")}`)}`);
+}
+
+export function shouldRefreshSimilarVideo(videoId: string): boolean {
+  return isRefreshDue(`similar_refresh:${videoId}`, SIMILAR_REFRESH_TTL_MS);
+}
+
+export function markSimilarVideoRefreshed(videoId: string): void {
+  markRefreshed(`similar_refresh:${videoId}`);
 }
 
 function hexHammingDistance(left: string, right: string): number {
@@ -254,6 +357,7 @@ export async function ingestSearchQuery(searchText: string, days = 365): Promise
   }
 
   const seedVideos = await youtubeClient.fetchVideos(dedupedVideoIds);
+  warmThumbnailHashes(seedVideos, 30);
   const channelIds = [...new Set(seedVideos.map((video) => video.channelId).filter(Boolean) as string[])].slice(0, 10);
   const channelMedians = new Map<string, number>();
 
@@ -280,6 +384,7 @@ export async function ingestSearchQuery(searchText: string, days = 365): Promise
       for (const channelVideo of channelVideos) {
         upsertVideoRecord(channelVideo, { medianViews });
       }
+      warmThumbnailHashes(channelVideos, 30);
     } else {
       upsertChannelRecord({
         channelId: channel.channelId,
@@ -447,6 +552,124 @@ async function deriveSeedChannelProfile(channelId: string, days: number): Promis
   return profile;
 }
 
+async function getTrackedChannelTitles(days: number): Promise<{ channelNames: string[]; titles: string[] }> {
+  const trackedChannelIds = (
+    db.prepare("SELECT channel_id FROM tracked_channels ORDER BY added_at DESC").all() as Array<{ channel_id: string }>
+  ).map((row) => row.channel_id);
+
+  if (trackedChannelIds.length === 0) {
+    return { channelNames: [], titles: [] };
+  }
+
+  const placeholders = trackedChannelIds.map((_, index) => `?`).join(", ");
+  const localRows = db.prepare(`
+    SELECT videos.title AS title, channels.name AS channelName
+    FROM videos
+    INNER JOIN channels ON channels.id = videos.channel_id
+    WHERE videos.channel_id IN (${placeholders})
+    ORDER BY videos.outlier_score DESC, videos.views DESC, videos.published_at DESC
+    LIMIT 48
+  `).all(...trackedChannelIds) as Array<{ title: string; channelName: string }>;
+
+  if (localRows.length >= 12) {
+    return {
+      channelNames: [...new Set(localRows.map((row) => row.channelName).filter(Boolean))],
+      titles: localRows.map((row) => row.title).filter(Boolean),
+    };
+  }
+
+  const titleSet = new Set<string>(localRows.map((row) => row.title).filter(Boolean));
+  const channelNames = new Set<string>(localRows.map((row) => row.channelName).filter(Boolean));
+
+  for (const channelId of trackedChannelIds.slice(0, 8)) {
+    const { channelName, titles } = await getSeedChannelTitles(channelId, days);
+    if (channelName) {
+      channelNames.add(channelName);
+    }
+    for (const title of titles) {
+      if (title) {
+        titleSet.add(title);
+      }
+    }
+  }
+
+  return {
+    channelNames: [...channelNames],
+    titles: [...titleSet].slice(0, 48),
+  };
+}
+
+async function deriveTrackedChannelProfile(days: number): Promise<{ queryText: string; queries: string[] }> {
+  const trackedChannelIds = (
+    db.prepare("SELECT channel_id FROM tracked_channels ORDER BY added_at DESC").all() as Array<{ channel_id: string }>
+  ).map((row) => row.channel_id);
+  const cacheKey = `tracked:${days}:${trackedChannelIds.join(",")}`;
+  const cached = seedProfileCache.get(cacheKey);
+  if (cached && Date.now() - cached.cachedAt < SEED_DISCOVERY_TTL_MS) {
+    return {
+      queryText: cached.queryText,
+      queries: cached.queries,
+    };
+  }
+
+  const { channelNames, titles } = await getTrackedChannelTitles(days);
+  const tokenCounts = new Map<string, number>();
+  const phraseCounts = new Map<string, number>();
+
+  for (const title of titles) {
+    const tokens = tokenizeTitle(title)
+      .map((token) => token.toLowerCase())
+      .filter((token) => token.length >= 3 && !CHANNEL_QUERY_STOPWORDS.has(token) && !/^\d+$/.test(token));
+
+    for (const token of tokens) {
+      tokenCounts.set(token, (tokenCounts.get(token) ?? 0) + 1);
+    }
+    for (const phrase of buildBigrams(tokens)) {
+      phraseCounts.set(phrase, (phraseCounts.get(phrase) ?? 0) + 1);
+    }
+  }
+
+  const topPhrases = [...phraseCounts.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .map(([phrase]) => phrase)
+    .filter((phrase) => phrase.split(" ").every((token) => !CHANNEL_QUERY_STOPWORDS.has(token)))
+    .slice(0, 5);
+
+  const topTokens = [...tokenCounts.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .map(([token]) => token)
+    .slice(0, 10);
+
+  const querySet = new Set<string>();
+  for (const phrase of topPhrases.slice(0, 4)) {
+    querySet.add(phrase);
+    querySet.add(`${phrase} tutorial`);
+  }
+  if (topTokens.length >= 2) {
+    querySet.add(`${topTokens[0]} ${topTokens[1]}`);
+  }
+  if (topTokens.length >= 3) {
+    querySet.add(`${topTokens[0]} ${topTokens[1]} ${topTokens[2]}`);
+  }
+  if (channelNames.length > 0) {
+    querySet.add(channelNames.slice(0, 2).join(" "));
+  }
+
+  const queries = [...querySet]
+    .map((value) => value.trim())
+    .filter((value) => value.length >= 3)
+    .slice(0, 4);
+
+  const queryText = [...topPhrases.slice(0, 2), ...topTokens.slice(0, 5)].join(" ").trim() || channelNames.join(" ");
+  const profile = { queryText, queries };
+  seedProfileCache.set(cacheKey, {
+    cachedAt: Date.now(),
+    queryText: profile.queryText,
+    queries: profile.queries,
+  });
+  return profile;
+}
+
 export async function ingestSeedChannelDiscovery(seedChannelId: string, days = 365): Promise<string> {
   const cacheKey = `${seedChannelId}:${days}`;
   const cachedAt = seedDiscoveryCache.get(cacheKey) ?? 0;
@@ -466,11 +689,36 @@ export async function ingestSeedChannelDiscovery(seedChannelId: string, days = 3
   return profile.queryText;
 }
 
+export async function ingestTrackedChannelDiscovery(days = 365): Promise<string> {
+  const trackedChannelIds = (
+    db.prepare("SELECT channel_id FROM tracked_channels ORDER BY added_at DESC").all() as Array<{ channel_id: string }>
+  ).map((row) => row.channel_id);
+  const cacheKey = `tracked:${days}:${trackedChannelIds.join(",")}`;
+  const cachedAt = seedDiscoveryCache.get(cacheKey) ?? 0;
+  const now = Date.now();
+
+  const profile = await deriveTrackedChannelProfile(days);
+
+  if (now - cachedAt < SEED_DISCOVERY_TTL_MS) {
+    return profile.queryText;
+  }
+
+  for (const query of profile.queries) {
+    await ingestSearchQuery(query, days);
+  }
+
+  seedDiscoveryCache.set(cacheKey, now);
+  return profile.queryText;
+}
+
 export async function listDiscoverOutliers(query: DiscoverQuery) {
   const searchText = query.search?.trim() ?? "";
-  const derivedSeedText = query.seedChannelId && !searchText
-    ? await deriveSeedChannelProfile(query.seedChannelId, query.days).then((profile) => profile.queryText)
-    : "";
+  let derivedSeedText = "";
+  if (!searchText && query.seedChannelId) {
+    derivedSeedText = await deriveSeedChannelProfile(query.seedChannelId, query.days).then((profile) => profile.queryText);
+  } else if (!searchText && query.trackedMode) {
+    derivedSeedText = await deriveTrackedChannelProfile(query.days).then((profile) => profile.queryText);
+  }
   const rankingSearchText = searchText || derivedSeedText;
   const hasSearch = searchText.length > 0;
   const hasRankingSearch = rankingSearchText.length > 0;
@@ -490,6 +738,7 @@ export async function listDiscoverOutliers(query: DiscoverQuery) {
   const whereClauses = [
     "videos.outlier_score >= @minScore",
     "videos.published_at >= @publishedAfter",
+    "NOT EXISTS (SELECT 1 FROM dismissed_videos dismissed_videos WHERE dismissed_videos.video_id = videos.id)",
   ];
   const params: Record<string, string | number> = {
     minScore,
@@ -497,7 +746,7 @@ export async function listDiscoverOutliers(query: DiscoverQuery) {
     projectId: query.projectId ?? -1,
   };
 
-  if (query.seedChannelId && query.channelScope === "adjacent") {
+  if (query.seedChannelId && query.includeAdjacent !== false && query.channelScope === "adjacent") {
     const relatedChannels = await getRelatedChannels(query.seedChannelId);
     const nicheChannelIds = [query.seedChannelId, ...relatedChannels.map((channel) => channel.id)];
     if (nicheChannelIds.length > 0) {
@@ -520,6 +769,13 @@ export async function listDiscoverOutliers(query: DiscoverQuery) {
   if (query.channelId) {
     whereClauses.push("videos.channel_id = @channelId");
     params.channelId = query.channelId;
+  }
+  if (query.seedChannelId && query.includeAdjacent === false) {
+    whereClauses.push("videos.channel_id = @seedChannelId");
+    params.seedChannelId = query.seedChannelId;
+  }
+  if (query.trackedMode && query.includeAdjacent === false) {
+    whereClauses.push("EXISTS (SELECT 1 FROM tracked_channels tracked_scope WHERE tracked_scope.channel_id = videos.channel_id)");
   }
   if (hasSearch) {
     params.search = `%${searchText}%`;
@@ -804,6 +1060,10 @@ export async function getSimilarTopics(videoId: string, limit = 12) {
       FROM videos
       INNER JOIN channels ON channels.id = videos.channel_id
       WHERE videos.id != ?
+        AND NOT EXISTS (
+          SELECT 1 FROM dismissed_videos dismissed_videos
+          WHERE dismissed_videos.video_id = videos.id
+        )
       ORDER BY videos.outlier_score DESC
       LIMIT 250
     `)
@@ -811,21 +1071,56 @@ export async function getSimilarTopics(videoId: string, limit = 12) {
 
   const candidateIds = candidates.map((candidate) => String(candidate.videoId));
   const embeddingScores = await embeddingsService.getSimilarityScores(videoId, candidateIds);
+  const seedTokens = new Set(tokenizeTitle(seed.title));
+  const seedFormat = titleFormat(seed.title);
 
   return candidates
     .map((candidate) => {
       const lexical = similarityScore(seed.title, String(candidate.title));
       const embedding = embeddingScores?.get(String(candidate.videoId));
+      const candidateTokens = new Set(tokenizeTitle(String(candidate.title)));
+      let tokenOverlap = 0;
+      for (const token of seedTokens) {
+        if (candidateTokens.has(token)) {
+          tokenOverlap += 1;
+        }
+      }
+      const overlapRatio = seedTokens.size > 0 ? tokenOverlap / seedTokens.size : 0;
+      const sameChannelBonus = String(candidate.channelId) === seed.channel_id ? 0.08 : 0;
+      const sameFormatBonus = titleFormat(String(candidate.title)) === seedFormat ? 0.04 : 0;
+      const similarity = embedding !== undefined
+        ? (embedding * 0.58) + (lexical * 0.26) + (overlapRatio * 0.12) + sameChannelBonus + sameFormatBonus
+        : (lexical * 0.72) + (overlapRatio * 0.2) + sameChannelBonus + sameFormatBonus;
+
       return {
         ...candidate,
         mode: embeddingScores ? "embedding" : "lexical",
-        similarity: embedding !== undefined ? Number(embedding.toFixed(4)) : lexical,
+        similarity: Number(similarity.toFixed(4)),
         lexicalSimilarity: lexical,
+        overlapRatio: Number(overlapRatio.toFixed(4)),
       };
     })
-    .filter((candidate) => candidate.similarity > 0)
+    .filter((candidate) => candidate.lexicalSimilarity > 0 || candidate.overlapRatio > 0 || candidate.similarity >= 0.32)
     .sort((left, right) => right.similarity - left.similarity)
     .slice(0, limit);
+}
+
+export async function refreshSimilarTopicDiscovery(videoId: string, days = 365): Promise<string | null> {
+  const seed = db.prepare("SELECT id, title FROM videos WHERE id = ?").get(videoId) as
+    | { id: string; title: string }
+    | undefined;
+  if (!seed?.title) {
+    return null;
+  }
+
+  const title = seed.title.trim();
+  if (title.length < 2) {
+    return null;
+  }
+
+  await ingestSearchQuery(title, days);
+
+  return title;
 }
 
 export async function getSimilarThumbnails(videoId: string, limit = 12) {
@@ -857,7 +1152,7 @@ export async function getSimilarThumbnails(videoId: string, limit = 12) {
       LEFT JOIN video_thumbnail_features AS thumbnail_features ON thumbnail_features.video_id = videos.id
       WHERE videos.id != ?
       ORDER BY videos.outlier_score DESC, videos.published_at DESC
-      LIMIT 300
+      LIMIT 1200
     `)
     .all(videoId) as Array<Record<string, unknown>>;
 

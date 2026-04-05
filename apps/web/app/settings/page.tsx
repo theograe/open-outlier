@@ -91,7 +91,7 @@ export default function SettingsPage() {
     <div className="stack">
       <header className="page-header">
         <div>
-          <div className="eyebrow">Connections</div>
+          <div className="eyebrow">Settings</div>
           <h1 className="headline">Connect your local OpenOutlier setup</h1>
           <p className="subtle">Add your keys to `.env`, restart the app, and OpenOutlier will auto-scan on startup when your data is stale.</p>
         </div>

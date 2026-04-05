@@ -73,8 +73,8 @@ export default function TrackedChannelsPage() {
       <header className="page-header">
         <div>
           <div className="eyebrow">Tracked Channels</div>
-          <h1 className="headline">Track channels once, browse the niche everywhere</h1>
-          <div className="subtle">Add your own channel or a few relevant channels here. Browse uses them to understand the niche and surface stronger outliers.</div>
+          <h1 className="headline">Track channels for your niche</h1>
+          <div className="subtle">Add your own channel first, then optionally add a few more relevant channels for the same niche.</div>
         </div>
       </header>
 
@@ -115,7 +115,7 @@ export default function TrackedChannelsPage() {
         ))}
       </section>
 
-      {channels.length === 0 ? <section className="panel alt">No tracked channels yet. Add your own channel or a few channels in your niche to shape Browse.</section> : null}
+      {channels.length === 0 ? <section className="panel alt">No tracked channels yet. Start with your own channel, then add a few more if you want tighter niche results in Browse.</section> : null}
     </div>
   );
 }

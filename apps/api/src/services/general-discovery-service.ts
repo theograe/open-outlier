@@ -41,6 +41,51 @@ const EXCLUDED_CHANNEL_TERMS = [
   "movieclips",
 ];
 
+async function warmThumbnailHashes(
+  videos: Array<{ id: string; thumbnailUrl: string | null | undefined }>,
+  limit = 40,
+): Promise<void> {
+  const pending: Array<{ id: string; thumbnailUrl: string }> = [];
+  const seen = new Set<string>();
+
+  for (const video of videos) {
+    if (!video.id || !video.thumbnailUrl || seen.has(video.id)) {
+      continue;
+    }
+    seen.add(video.id);
+    pending.push({ id: video.id, thumbnailUrl: video.thumbnailUrl });
+    if (pending.length >= limit) {
+      break;
+    }
+  }
+
+  if (pending.length === 0) {
+    return;
+  }
+
+  await Promise.allSettled(
+    pending.map(async (video) => {
+      const exists = db.prepare("SELECT 1 FROM video_thumbnail_features WHERE video_id = ?").get(video.id) as { 1: number } | undefined;
+      if (exists) {
+        return;
+      }
+      const response = await fetch(video.thumbnailUrl);
+      if (!response.ok) {
+        return;
+      }
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const perceptualHash = await (await import("imghash")).default.hash(buffer, 16, "hex");
+      db.prepare(`
+        INSERT INTO video_thumbnail_features (video_id, algorithm, perceptual_hash, created_at, updated_at)
+        VALUES (?, 'imghash', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(video_id) DO UPDATE SET
+          perceptual_hash = excluded.perceptual_hash,
+          updated_at = CURRENT_TIMESTAMP
+      `).run(video.id, perceptualHash);
+    }),
+  );
+}
+
 export class GeneralDiscoveryService {
   private readonly youtubeClient = new YoutubeClient();
 
@@ -148,6 +193,7 @@ export class GeneralDiscoveryService {
     const publishedAfter = subtractDays(365);
     const videoIds = await this.youtubeClient.listRecentUploadVideoIds(channel.uploadsPlaylistId, publishedAfter);
     const videos = await this.youtubeClient.fetchVideos(videoIds);
+    await warmThumbnailHashes(videos, 36);
     const now = isoNow();
     const viewValues = videos.map((video) => video.views).filter((views) => views > 0);
     const medianViews = median(viewValues);

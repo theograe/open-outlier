@@ -3,25 +3,25 @@
 OpenOutlier is an open-source, local-first YouTube outlier finder.
 
 It is built for one narrow job:
-- search YouTube for outliers in a niche
-- browse strong videos quickly
-- track interesting channels
+- add your channel
+- optionally track a few more channels in your niche
+- browse YouTube outliers
 - save the best references into collections
 
 ## What ships in this MVP
 
 - Fastify API for discovery, tracked channels, collections, scans, and saved references
-- Next.js local UI for Browse, Collections, Tracked Channels, and Connections
+- Next.js local UI for Browse, Collections, Tracked Channels, and Settings
 - SQLite storage for local/self-hosted use
 - agent-friendly REST API, TypeScript SDK, MCP server, and CLI
-- topic similarity and thumbnail similarity for browsing related outliers
+- topic-based similar-video browsing
 
 ## Product model
 
 - `Browse`: the main feed for finding outliers
 - `Tracked channels`: channels you want OpenOutlier to learn from and scan
 - `Collections`: saved-video folders for references you want to keep
-- `Connections`: API keys and local connection health
+- `Settings`: API keys and local connection health
 
 ## Workspace layout
 
@@ -63,12 +63,25 @@ NEXT_PUBLIC_OPENOUTLIER_API_URL=http://localhost:3001
 NEXT_PUBLIC_OPENOUTLIER_API_KEY=choose-a-long-random-string
 ```
 
-## How to use it
+## Onboarding flow
 
-1. Add your own channel or a few relevant channels to `Tracked channels`
-2. Let OpenOutlier scan them
-3. Use `Browse` to search a niche, pick a tracked source channel, or explore AI channel search
-4. Save strong outliers into `Collections`
+1. Open `Tracked Channels`
+2. Add your own channel URL or handle
+3. Optionally add a few more channels in the same niche
+4. Open `Collections` and create one collection for the references you want to keep
+5. Open `Browse`
+6. Stay in `General`, use `All tracked channels`, or pick one tracked channel
+7. Search, browse, and save the best outliers into your collection
+
+## How Browse works
+
+- `General`: broad YouTube outliers
+- `All tracked channels`: uses your tracked set as a niche source
+- `Single tracked channel`: uses one tracked channel as the niche source
+- `View similar`: opens a related-video browse page for the selected video
+- `Save`: adds the video to a collection
+- `Track channel`: adds that channel to your tracked set
+- `×`: hides that video from future Browse and Similar results
 
 ## Scripts
 
@@ -85,7 +98,7 @@ NEXT_PUBLIC_OPENOUTLIER_API_KEY=choose-a-long-random-string
 - `POST /api/collections`
 - `GET /api/discover/outliers`
 - `GET /api/discover/similar-topics`
-- `GET /api/discover/similar-thumbnails`
+- `POST /api/discover/dismissed-videos`
 - `POST /api/collections/:id/references`
 - `POST /api/scan`
 
@@ -105,7 +118,7 @@ That means the local web UI works without a browser-exposed key, and local agent
 
 ## Notes
 
-- YouTube search is quota-limited. If your quota is exhausted, OpenOutlier falls back to the local scanned pool where possible.
+- YouTube search is quota-limited. If your quota is exhausted, OpenOutlier shows a clear quota warning in Browse and Similar.
 - The app is intentionally local-first, so some searches are slower than premium hosted tools that precompute large cloud indexes.
 
 ## License

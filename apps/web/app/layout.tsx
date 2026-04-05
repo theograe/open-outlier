@@ -5,6 +5,10 @@ import { AppNav } from "../components/nav";
 export const metadata = {
   title: "OpenOutlier",
   description: "Open-source YouTube outlier research cockpit",
+  icons: {
+    icon: "/icon.png",
+    apple: "/apple-icon.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

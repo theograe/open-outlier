@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { OutlierCard } from "../../../../components/outlier-card";
 import { apiFetch } from "../../../../lib/api";
 
@@ -39,19 +39,28 @@ type Collection = {
   name: string;
 };
 
+type SimilarResponse = {
+  items: SimilarItem[];
+  warning?: {
+    code: string;
+    message: string;
+  };
+};
+
 export default function SimilarDiscoverPage() {
   const params = useParams<{ videoId: string }>();
-  const searchParams = useSearchParams();
   const videoId = params.videoId;
-  const mode = searchParams.get("mode") === "topic" ? "topic" : "thumbnail";
   const [video, setVideo] = useState<Video | null>(null);
   const [similar, setSimilar] = useState<SimilarItem[]>([]);
   const [collectionId, setCollectionId] = useState<string>("");
   const [error, setError] = useState("");
+  const [warning, setWarning] = useState("");
+  const [loadingSimilar, setLoadingSimilar] = useState(true);
   const [savedVideoIds, setSavedVideoIds] = useState<string[]>([]);
   const [trackedChannelIds, setTrackedChannelIds] = useState<string[]>([]);
   const [pendingVideoIds, setPendingVideoIds] = useState<string[]>([]);
   const [pendingChannelIds, setPendingChannelIds] = useState<string[]>([]);
+  const [pendingDismissedVideoIds, setPendingDismissedVideoIds] = useState<string[]>([]);
 
   useEffect(() => {
     void apiFetch<Collection[]>("/api/collections")
@@ -83,15 +92,20 @@ export default function SimilarDiscoverPage() {
 
   useEffect(() => {
     setError("");
+    setWarning("");
+    setLoadingSimilar(true);
     void apiFetch<Video>(`/api/discover/video/${videoId}`)
       .then(setVideo)
       .catch((fetchError) => setError(fetchError instanceof Error ? fetchError.message : "Failed to load video."));
 
-    const endpoint = mode === "thumbnail" ? "similar-thumbnails" : "similar-topics";
-    void apiFetch<{ items: SimilarItem[] }>(`/api/discover/${endpoint}?videoId=${videoId}&limit=18`)
-      .then((response) => setSimilar(response.items))
-      .catch((fetchError) => setError(fetchError instanceof Error ? fetchError.message : "Failed to load similar videos."));
-  }, [mode, videoId]);
+    void apiFetch<SimilarResponse>(`/api/discover/similar-topics?videoId=${videoId}&limit=18`)
+      .then((response) => {
+        setSimilar(response.items);
+        setWarning(response.warning?.message ?? "");
+      })
+      .catch((fetchError) => setError(fetchError instanceof Error ? fetchError.message : "Failed to load similar videos."))
+      .finally(() => setLoadingSimilar(false));
+  }, [videoId]);
 
   async function saveVideo(targetVideoId: string) {
     if (!collectionId) {
@@ -150,22 +164,44 @@ export default function SimilarDiscoverPage() {
     }
   }
 
+  async function dismissVideo(targetVideoId: string) {
+    if (pendingDismissedVideoIds.includes(targetVideoId)) {
+      return;
+    }
+
+    setPendingDismissedVideoIds((current) => [...current, targetVideoId]);
+
+    try {
+      await apiFetch("/api/discover/dismissed-videos", {
+        method: "POST",
+        body: JSON.stringify({
+          videoId: targetVideoId,
+        }),
+      });
+      setSimilar((current) => current.filter((item) => item.videoId !== targetVideoId));
+      setError("");
+    } catch (dismissError) {
+      setError(dismissError instanceof Error ? dismissError.message : "Failed to hide video.");
+    } finally {
+      setPendingDismissedVideoIds((current) => current.filter((id) => id !== targetVideoId));
+    }
+  }
+
   return (
     <div className="stack">
       <header className="page-header">
         <div>
           <div className="eyebrow">Discover</div>
-          <h1 className="headline">{mode === "thumbnail" ? "Browse similar thumbnails" : "Browse similar topics"}</h1>
+          <h1 className="headline">Browse similar videos</h1>
           <div className="subtle">Click any thumbnail to keep exploring. Click any title to open the original video.</div>
         </div>
         <div className="simple-toolbar">
-          <Link className={`button secondary ${mode === "thumbnail" ? "active-mode" : ""}`} href={`/discover/video/${videoId}?mode=thumbnail`}>Thumbnails</Link>
-          <Link className={`button secondary ${mode === "topic" ? "active-mode" : ""}`} href={`/discover/video/${videoId}?mode=topic`}>Topics</Link>
           <Link className="button secondary" href="/discover">Back to Discover</Link>
         </div>
       </header>
 
-      {error ? <section className="panel">{error}</section> : null}
+      {error ? <section className="panel panel-error">{error}</section> : null}
+      {warning ? <section className="panel">{warning}</section> : null}
 
       {video ? (
         <section className="panel">
@@ -204,8 +240,7 @@ export default function SimilarDiscoverPage() {
                 scoreBand: "warm",
                 contentType: "long",
               }}
-              similarHref={`/discover/video/${item.videoId}?mode=thumbnail`}
-              similarTopicsHref={`/discover/video/${item.videoId}?mode=topic`}
+              similarHref={`/discover/video/${item.videoId}`}
               similarChannelsHref={item.channelId ? `/discover/channel/${item.channelId}` : undefined}
               onOpenSave={() => {
                 void saveVideo(item.videoId);
@@ -220,6 +255,9 @@ export default function SimilarDiscoverPage() {
               onTrackChannel={() => {
                 void saveChannel(item.channelId);
               }}
+              onDismiss={() => {
+                void dismissVideo(item.videoId);
+              }}
               trackState={
                 item.channelId && pendingChannelIds.includes(item.channelId)
                   ? "saving"
@@ -227,9 +265,11 @@ export default function SimilarDiscoverPage() {
                     ? "saved"
                     : "idle"
               }
+              dismissState={pendingDismissedVideoIds.includes(item.videoId) ? "saving" : "idle"}
             />
           ))}
-          {similar.length === 0 && !error ? <div className="subtle">No similar videos found yet.</div> : null}
+          {loadingSimilar ? <div className="subtle">Loading similar videos...</div> : null}
+          {!loadingSimilar && similar.length === 0 && !error ? <div className="subtle">No similar videos found yet.</div> : null}
         </div>
       </section>
     </div>

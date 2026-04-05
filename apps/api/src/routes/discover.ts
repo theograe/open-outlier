@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db.js";
-import { getNiches, getSimilarThumbnails, getSimilarTopics, getVideoForDiscover, ingestSearchQuery, ingestSeedChannelDiscovery, listDiscoverOutliers } from "../services/discovery.js";
+import { dismissVideo, getNiches, getSimilarThumbnails, getSimilarTopics, getVideoForDiscover, ingestSearchQuery, ingestSeedChannelDiscovery, ingestTrackedChannelDiscovery, listDiscoverOutliers, markSearchQueryRefreshed, markSeedChannelDiscoveryRefreshed, markSimilarVideoRefreshed, markTrackedChannelDiscoveryRefreshed, refreshSimilarTopicDiscovery, shouldRefreshSearchQuery, shouldRefreshSeedChannelDiscovery, shouldRefreshSimilarVideo, shouldRefreshTrackedChannelDiscovery } from "../services/discovery.js";
 import { GeneralDiscoveryService } from "../services/general-discovery-service.js";
 
 function isYoutubeQuotaError(error: unknown): boolean {
@@ -12,7 +12,9 @@ const discoverQuerySchema = z.object({
   listId: z.coerce.number().int().optional(),
   projectId: z.coerce.number().int().optional(),
   seedChannelId: z.string().optional(),
+  trackedMode: z.coerce.boolean().optional(),
   generalMode: z.coerce.boolean().optional(),
+  includeAdjacent: z.coerce.boolean().optional(),
   excludeProjectSaved: z.coerce.boolean().optional(),
   channelScope: z.enum(["all", "tracked", "adjacent"]).optional(),
   minScore: z.coerce.number().optional(),
@@ -48,9 +50,10 @@ export async function registerDiscoverRoutes(app: FastifyInstance): Promise<void
         }
       | undefined;
 
-    if (query.search?.trim()) {
+    if (query.search?.trim() && shouldRefreshSearchQuery(query.search)) {
       try {
         await ingestSearchQuery(query.search, query.days);
+        markSearchQueryRefreshed(query.search);
       } catch (error) {
         if (!isYoutubeQuotaError(error)) {
           throw error;
@@ -62,9 +65,10 @@ export async function registerDiscoverRoutes(app: FastifyInstance): Promise<void
       }
     }
 
-    if (query.seedChannelId) {
+    if (query.seedChannelId && shouldRefreshSeedChannelDiscovery(query.seedChannelId, query.days)) {
       try {
         await ingestSeedChannelDiscovery(query.seedChannelId, query.days);
+        markSeedChannelDiscoveryRefreshed(query.seedChannelId, query.days);
       } catch (error) {
         if (!isYoutubeQuotaError(error)) {
           throw error;
@@ -72,6 +76,21 @@ export async function registerDiscoverRoutes(app: FastifyInstance): Promise<void
         warning = {
           code: "YOUTUBE_QUOTA_EXCEEDED",
           message: "YouTube API quota is exhausted right now. OpenOutlier is using your local scanned library for channel-niche results until quota resets.",
+        };
+      }
+    }
+
+    if (query.trackedMode && shouldRefreshTrackedChannelDiscovery(query.days)) {
+      try {
+        await ingestTrackedChannelDiscovery(query.days);
+        markTrackedChannelDiscoveryRefreshed(query.days);
+      } catch (error) {
+        if (!isYoutubeQuotaError(error)) {
+          throw error;
+        }
+        warning = {
+          code: "YOUTUBE_QUOTA_EXCEEDED",
+          message: "YouTube API quota is exhausted right now. OpenOutlier is using your local scanned library for tracked-channel niche results until quota resets.",
         };
       }
     }
@@ -130,11 +149,38 @@ export async function registerDiscoverRoutes(app: FastifyInstance): Promise<void
 
   app.get("/api/discover/similar-topics", async (request, reply) => {
     const query = z.object({ videoId: z.string(), limit: z.coerce.number().int().min(1).max(30).default(12) }).parse(request.query);
+    let warning:
+      | {
+          code: "YOUTUBE_QUOTA_EXCEEDED";
+          message: string;
+        }
+      | undefined;
+
+    if (shouldRefreshSimilarVideo(query.videoId)) {
+      try {
+        await Promise.race([
+          refreshSimilarTopicDiscovery(query.videoId, 365),
+          new Promise((_, reject) => {
+            setTimeout(() => reject(new Error("similar-refresh-timeout")), 4500);
+          }),
+        ]);
+        markSimilarVideoRefreshed(query.videoId);
+      } catch (error) {
+        if (!(error instanceof Error && error.message === "similar-refresh-timeout") && !isYoutubeQuotaError(error)) {
+          throw error;
+        }
+        warning = {
+          code: "YOUTUBE_QUOTA_EXCEEDED",
+          message: "OpenOutlier could not refresh similar videos from YouTube right now, so it is showing results from your local scanned library.",
+        };
+      }
+    }
+
     const results = await getSimilarTopics(query.videoId, query.limit);
     if (!results) {
       return reply.notFound("Video not found.");
     }
-    return { videoId: query.videoId, items: results };
+    return warning ? { videoId: query.videoId, items: results, warning } : { videoId: query.videoId, items: results };
   });
 
   app.get("/api/discover/similar-thumbnails", async (request, reply) => {
@@ -161,5 +207,11 @@ export async function registerDiscoverRoutes(app: FastifyInstance): Promise<void
       days: query.days,
       niches: getNiches(query.days, query.limit),
     };
+  });
+
+  app.post("/api/discover/dismissed-videos", async (request, reply) => {
+    const body = z.object({ videoId: z.string().min(1) }).parse(request.body);
+    dismissVideo(body.videoId);
+    return reply.code(204).send();
   });
 }

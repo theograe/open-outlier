@@ -272,6 +272,11 @@ export function createSqliteStorage(databasePath: string): SqliteStorage {
         added_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
 
+      CREATE TABLE IF NOT EXISTS dismissed_videos (
+        video_id TEXT PRIMARY KEY REFERENCES videos(id) ON DELETE CASCADE,
+        dismissed_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+
       CREATE TABLE IF NOT EXISTS project_references (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         workspace_id INTEGER NOT NULL DEFAULT 1 REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -377,6 +382,7 @@ export function createSqliteStorage(databasePath: string): SqliteStorage {
       CREATE INDEX IF NOT EXISTS idx_project_references_project_id ON project_references(project_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_workflow_runs_project_id ON workflow_runs(project_id, updated_at DESC);
       CREATE INDEX IF NOT EXISTS idx_tracked_channels_added_at ON tracked_channels(added_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_dismissed_videos_dismissed_at ON dismissed_videos(dismissed_at DESC);
     `);
 
     db.exec(`

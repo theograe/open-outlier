@@ -32,6 +32,7 @@ type Channel = {
   id: string;
   name: string;
   handle: string | null;
+  thumbnailUrl?: string | null;
 };
 
 type DiscoverWarning = {
@@ -43,6 +44,7 @@ type DiscoverPayload = { videos: Video[]; total: number; warning?: DiscoverWarni
 type FilterState = {
   search: string;
   seedChannelId: string;
+  includeAdjacent: boolean;
   contentType: "all" | "long" | "short";
   minScore: string;
   maxScore: string;
@@ -60,6 +62,7 @@ type FilterState = {
 const defaultFilters: FilterState = {
   search: "",
   seedChannelId: "",
+  includeAdjacent: true,
   contentType: "long",
   minScore: "1",
   maxScore: "",
@@ -73,6 +76,8 @@ const defaultFilters: FilterState = {
   sort: "momentum",
   limit: "50",
 };
+
+const ALL_TRACKED_CHANNELS = "__all_tracked__";
 
 const publicationPresets = [
   { label: "7d", days: "7" },
@@ -245,6 +250,7 @@ export default function DiscoverPage() {
   const [pendingVideoIds, setPendingVideoIds] = useState<string[]>([]);
   const [savedVideoIds, setSavedVideoIds] = useState<string[]>([]);
   const [pendingChannelIds, setPendingChannelIds] = useState<string[]>([]);
+  const [pendingDismissedVideoIds, setPendingDismissedVideoIds] = useState<string[]>([]);
   const [trackedChannelIds, setTrackedChannelIds] = useState<string[]>([]);
   const [saveModalVideo, setSaveModalVideo] = useState<Video | null>(null);
   const [creatingCollection, setCreatingCollection] = useState(false);
@@ -264,7 +270,9 @@ export default function DiscoverPage() {
 
     if (filters.search) params.set("search", filters.search);
     if (!filters.seedChannelId) params.set("generalMode", "true");
-    if (filters.seedChannelId) params.set("seedChannelId", filters.seedChannelId);
+    if (filters.seedChannelId === ALL_TRACKED_CHANNELS) params.set("trackedMode", "true");
+    if (filters.seedChannelId && filters.seedChannelId !== ALL_TRACKED_CHANNELS) params.set("seedChannelId", filters.seedChannelId);
+    if (filters.seedChannelId) params.set("includeAdjacent", String(filters.includeAdjacent));
     if (filters.minViews) params.set("minViews", filters.minViews);
     if (filters.maxViews) params.set("maxViews", filters.maxViews);
     if (filters.maxScore) params.set("maxScore", filters.maxScore);
@@ -409,6 +417,33 @@ export default function DiscoverPage() {
     }
   }
 
+  async function dismissVideo(video: Video) {
+    if (pendingDismissedVideoIds.includes(video.videoId)) {
+      return;
+    }
+
+    setPendingDismissedVideoIds((current) => [...current, video.videoId]);
+
+    try {
+      await apiFetch("/api/discover/dismissed-videos", {
+        method: "POST",
+        body: JSON.stringify({
+          videoId: video.videoId,
+        }),
+      });
+      setVideos((current) => current.filter((item) => item.videoId !== video.videoId));
+      setTotal((current) => Math.max(0, current - 1));
+      if (saveModalVideo?.videoId === video.videoId) {
+        setSaveModalVideo(null);
+      }
+      setError("");
+    } catch (dismissError) {
+      setError(dismissError instanceof Error ? dismissError.message : "Failed to hide video.");
+    } finally {
+      setPendingDismissedVideoIds((current) => current.filter((id) => id !== video.videoId));
+    }
+  }
+
   return (
     <div className="stack">
       <header className="simple-hero">
@@ -423,8 +458,10 @@ export default function DiscoverPage() {
 
       <section className="panel discover-shell">
         <div className="discover-mode-note">
-          {filters.seedChannelId
-            ? `Browsing outliers in the niche of ${trackedChannels.find((item) => item.id === filters.seedChannelId)?.name ?? "this channel"}.`
+          {filters.seedChannelId === ALL_TRACKED_CHANNELS
+            ? `Browsing outliers shaped by all tracked channels${filters.includeAdjacent ? " and adjacent videos." : "."}`
+            : filters.seedChannelId
+            ? `Browsing outliers in the niche of ${trackedChannels.find((item) => item.id === filters.seedChannelId)?.name ?? "this channel"}${filters.includeAdjacent ? " and adjacent videos." : "."}`
             : "Browsing general YouTube outliers."}
         </div>
 
@@ -443,9 +480,13 @@ export default function DiscoverPage() {
                 <>
                   <span className="discover-source-content">
                     <span className="discover-source-title">
-                      {trackedChannels.find((item) => item.id === filters.seedChannelId)?.name ?? "Your channel"}
+                      {filters.seedChannelId === ALL_TRACKED_CHANNELS
+                        ? "All tracked channels"
+                        : trackedChannels.find((item) => item.id === filters.seedChannelId)?.name ?? "Tracked channel"}
                     </span>
-                    <span className="discover-source-subtitle">My channel</span>
+                    <span className="discover-source-subtitle">
+                      {filters.seedChannelId === ALL_TRACKED_CHANNELS ? "Tracked niche" : "Tracked channel"}
+                    </span>
                   </span>
                   <button
                     type="button"
@@ -464,8 +505,8 @@ export default function DiscoverPage() {
               ) : (
                 <>
                   <span className="discover-source-content">
-                    <span className="discover-source-title">AI channel search</span>
-                    <span className="discover-source-subtitle">Choose a channel</span>
+                    <span className="discover-source-title">General</span>
+                    <span className="discover-source-subtitle">Choose a source</span>
                   </span>
                   <span className="discover-source-caret">⌄</span>
                 </>
@@ -481,8 +522,20 @@ export default function DiscoverPage() {
                     setSourceMenuOpen(false);
                   }}
                 >
-                  AI channel search
+                  General
                 </button>
+                {trackedChannels.length > 0 ? (
+                  <button
+                    type="button"
+                    className={`discover-project-option ${filters.seedChannelId === ALL_TRACKED_CHANNELS ? "active" : ""}`}
+                    onClick={() => {
+                      updateFilter("seedChannelId", ALL_TRACKED_CHANNELS);
+                      setSourceMenuOpen(false);
+                    }}
+                  >
+                    All tracked channels
+                  </button>
+                ) : null}
                 {trackedChannels.map((channel) => (
                   <button
                     key={channel.id}
@@ -494,7 +547,7 @@ export default function DiscoverPage() {
                     }}
                   >
                     <span className="discover-source-option">
-                      <ChannelAvatar src={null} alt={channel.name} name={channel.name} className="discover-source-option-avatar" />
+                      <ChannelAvatar src={channel.thumbnailUrl ?? null} alt={channel.name} name={channel.name} className="discover-source-option-avatar" />
                       <span>
                         <strong>{channel.name}</strong>
                         <span className="subtle">{channel.handle ?? "Tracked channel"}</span>
@@ -502,6 +555,16 @@ export default function DiscoverPage() {
                     </span>
                   </button>
                 ))}
+                {filters.seedChannelId ? (
+                  <label className="discover-source-toggle">
+                    <input
+                      type="checkbox"
+                      checked={filters.includeAdjacent}
+                      onChange={(event) => updateFilter("includeAdjacent", event.target.checked)}
+                    />
+                    <span>Include adjacent videos</span>
+                  </label>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -545,6 +608,7 @@ export default function DiscoverPage() {
                       onClick={() => setFilters((current) => ({
                         ...defaultFilters,
                         seedChannelId: current.seedChannelId,
+                        includeAdjacent: current.includeAdjacent,
                         search: current.search,
                       }))}
                     >
@@ -651,6 +715,9 @@ export default function DiscoverPage() {
               onTrackChannel={(item) => {
                 void trackChannel(item as Video);
               }}
+              onDismiss={(item) => {
+                void dismissVideo(item as Video);
+              }}
               saveState={
                 pendingVideoIds.includes(video.videoId)
                   ? "saving"
@@ -665,6 +732,7 @@ export default function DiscoverPage() {
                     ? "saved"
                     : "idle"
               }
+              dismissState={pendingDismissedVideoIds.includes(video.videoId) ? "saving" : "idle"}
               similarChannelsHref={video.channelId ? `/discover/channel/${video.channelId}` : undefined}
             />
           ))}

@@ -54,7 +54,8 @@ Create a collection.
 
 ```json
 {
-  "name": "Editing references"
+  "name": "Editing references",
+  "niche": "English editing tutorials"
 }
 ```
 
@@ -83,7 +84,9 @@ Search the outlier feed.
 Useful query params:
 - `search`
 - `seedChannelId`
+- `trackedMode=true`
 - `generalMode=true`
+- `includeAdjacent=true|false`
 - `contentType=all|long|short`
 - `days`
 - `minScore`
@@ -100,7 +103,8 @@ Useful query params:
 
 Notes:
 - `seedChannelId` tells OpenOutlier to infer a niche from that channel and search for related outliers.
-- `generalMode=true` is the broad AI channel search mode.
+- `trackedMode=true` uses the tracked-channel set as a blended niche source.
+- `generalMode=true` is the broad general mode.
 - when YouTube quota is exhausted, the response can include:
 
 ```json
@@ -112,15 +116,21 @@ Notes:
 }
 ```
 
-In that case, OpenOutlier is falling back to the local scanned library where possible.
+In that case, OpenOutlier could not refresh from YouTube for that request.
 
 ### `GET /api/discover/similar-topics?videoId=...`
 
-Return title/topic-neighbor videos.
+Return similar videos for one source video.
 
-### `GET /api/discover/similar-thumbnails?videoId=...`
+### `POST /api/discover/dismissed-videos`
 
-Return visually similar thumbnails.
+Hide one video from future Browse and Similar results.
+
+```json
+{
+  "videoId": "abc123xyz89"
+}
+```
 
 ### `GET /api/discover/video/:videoId`
 
@@ -134,14 +144,21 @@ Return topic clusters from recent outliers.
 
 ### `POST /api/scan`
 
-Start a scan.
+Start a scan for tracked channels.
 
-```json
-{
-  "listId": 1
-}
-```
+Body is optional.
 
 ### `GET /api/scan/status`
 
 Fetch current scan status.
+
+## Recommended user flow
+
+1. Add your own channel in `Tracked Channels`
+2. Optionally add a few more relevant channels
+3. Create a collection
+4. Use `GET /api/discover/outliers` in one of three modes:
+   - `generalMode=true`
+   - `trackedMode=true`
+   - `seedChannelId=...`
+5. Save strong results with `POST /api/collections/:id/references`

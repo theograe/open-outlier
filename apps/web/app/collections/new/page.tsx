@@ -43,7 +43,7 @@ export default function NewCollectionPage() {
         <div>
           <div className="eyebrow">Collections</div>
           <h1 className="headline">Create a collection</h1>
-          <div className="subtle">Collections are just saved-video folders. Track channels separately, then save the best outliers here.</div>
+          <div className="subtle">Create a folder for the outliers you want to keep. Then head back to Browse and start saving.</div>
         </div>
       </header>
 
@@ -69,8 +69,8 @@ export default function NewCollectionPage() {
 
       <section className="panel alt stack">
         <div>
-          <strong>Need to shape Browse first?</strong>
-          <div className="subtle">Add your own channel or a few relevant channels in Tracked Channels, then come back and save the best videos into collections.</div>
+          <strong>New here?</strong>
+          <div className="subtle">Start by adding your own channel in Tracked Channels. Then come back, create a collection, and save the best videos from Browse.</div>
         </div>
         <div className="simple-toolbar">
           <Link className="button secondary" href="/tracked-channels">Open Tracked Channels</Link>

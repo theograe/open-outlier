@@ -22,7 +22,10 @@ export function buildApp() {
   const app = Fastify({ logger: true });
   const scanService = new ScanService();
 
-  void app.register(cors, { origin: true });
+  void app.register(cors, {
+    origin: true,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  });
   void app.register(sensible);
 
   app.get("/api/health", async () => ({

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
 
 type Video = {
   videoId: string;
@@ -63,45 +62,28 @@ export function OutlierCard({
   video,
   onOpenSave,
   onTrackChannel,
+  onDismiss,
   saveState = "idle",
   trackState = "idle",
+  dismissState = "idle",
   similarHref,
-  similarTopicsHref,
   similarChannelsHref,
 }: {
   video: Video;
   onOpenSave?: (video: Video) => void;
   onTrackChannel?: (video: Video) => void;
+  onDismiss?: (video: Video) => void;
   saveState?: "idle" | "saving" | "saved";
   trackState?: "idle" | "saving" | "saved";
+  dismissState?: "idle" | "saving";
   similarHref?: string;
-  similarTopicsHref?: string;
   similarChannelsHref?: string;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const browseHref = similarHref ?? `/discover/video/${video.videoId}?mode=thumbnail`;
-  const topicsHref = similarTopicsHref ?? `/discover/video/${video.videoId}?mode=topic`;
+  const browseHref = similarHref ?? `/discover/video/${video.videoId}`;
   const channelsHref = similarChannelsHref ?? (video.channelId ? `/discover/channel/${video.channelId}` : "#");
   const youtubeHref = `https://youtube.com/watch?v=${video.videoId}`;
   const statsLine = `${formatCompactNumber(video.views)} views vs ${formatCompactNumber(video.channelMedianViews)} avg`;
   const metaLine = `${formatCompactNumber(video.channelSubscribers)} subs`;
-
-  useEffect(() => {
-    function handleClick(event: MouseEvent) {
-      if (!menuRef.current?.contains(event.target as Node)) {
-        setMenuOpen(false);
-      }
-    }
-
-    if (menuOpen) {
-      document.addEventListener("mousedown", handleClick);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClick);
-    };
-  }, [menuOpen]);
 
   return (
     <article className="outlier-tile">
@@ -114,49 +96,76 @@ export function OutlierCard({
           )}
         </Link>
         <div className="outlier-hover">
-          <div className="outlier-hover-corner outlier-hover-top-right" ref={menuRef}>
-            <button
-              type="button"
-              className="hover-icon-button"
-              onClick={() => setMenuOpen((current) => !current)}
-            >
-              •••
-            </button>
-            {menuOpen ? (
-              <div className="hover-menu">
-                <Link href={topicsHref} className="hover-menu-item" onClick={() => setMenuOpen(false)}>Similar videos</Link>
-                <Link href={browseHref} className="hover-menu-item" onClick={() => setMenuOpen(false)}>Similar thumbnails</Link>
-                <button
-                  type="button"
-                  className={`hover-menu-item ${trackState === "saved" ? "is-success" : ""}`}
-                  disabled={!video.channelId || trackState !== "idle"}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    if (trackState === "idle") {
-                      onTrackChannel?.(video);
-                    }
-                  }}
-                >
-                  {trackState === "saving" ? "Tracking..." : trackState === "saved" ? "Tracked" : "Track channel"}
-                </button>
-              </div>
-            ) : null}
+          <div className="outlier-hover-corner outlier-hover-top-right">
+            <span className="tooltip-anchor" data-tooltip="Hide video">
+              <button
+                type="button"
+                className="hover-icon-button hover-icon-button-dismiss"
+                disabled={dismissState !== "idle"}
+                onClick={() => {
+                  if (dismissState === "idle") {
+                    onDismiss?.(video);
+                  }
+                }}
+                aria-label="Hide video forever"
+              >
+                {dismissState === "saving" ? "…" : "×"}
+              </button>
+            </span>
           </div>
-          <div className="outlier-hover-corner outlier-hover-bottom-right">
-            <button
-              type="button"
-              className={`hover-icon-button ${saveState === "saved" ? "is-success" : ""}`}
-              disabled={saveState === "saving"}
-              onClick={() => onOpenSave?.(video)}
-              aria-label="Save video"
-            >
-              {saveState === "saving" ? "…" : saveState === "saved" ? "✓" : "🔖"}
-            </button>
+          <div className="outlier-hover-corner outlier-hover-center">
+            <Link href={browseHref} className="hover-action-button">
+              View similar
+            </Link>
           </div>
         </div>
-        {video.durationSeconds ? (
-          <div className="outlier-duration subtle-duration">{formatCompactDuration(video.durationSeconds)}</div>
-        ) : null}
+        <div className="outlier-media-controls">
+          {video.durationSeconds ? (
+            <div className="outlier-duration subtle-duration">{formatCompactDuration(video.durationSeconds)}</div>
+          ) : null}
+          <div className="outlier-media-actions">
+            <span className="tooltip-anchor" data-tooltip={trackState === "saved" ? "Tracked" : "Track channel"}>
+              <button
+                type="button"
+                className={`hover-icon-button ${trackState === "saved" ? "is-success" : ""}`}
+                disabled={!video.channelId || trackState !== "idle"}
+                onClick={() => {
+                  if (trackState === "idle") {
+                    onTrackChannel?.(video);
+                  }
+                }}
+                aria-label={trackState === "saved" ? "Tracked channel" : "Track channel"}
+              >
+                {trackState === "saving" ? (
+                  "…"
+                ) : trackState === "saved" ? (
+                  "✓"
+                ) : (
+                  <span className="icon-plus" aria-hidden="true">+</span>
+                )}
+              </button>
+            </span>
+            <span className="tooltip-anchor" data-tooltip={saveState === "saved" ? "Saved" : "Save video"}>
+              <button
+                type="button"
+                className={`hover-icon-button ${saveState === "saved" ? "is-success" : ""}`}
+                disabled={saveState === "saving"}
+                onClick={() => onOpenSave?.(video)}
+                aria-label="Save video"
+              >
+                {saveState === "saving" ? (
+                  "…"
+                ) : saveState === "saved" ? (
+                  "✓"
+                ) : (
+                  <svg className="icon-bookmark" viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M4.25 2.25h7.5a.5.5 0 0 1 .5.5v10.2a.3.3 0 0 1-.49.234L8 10.08l-3.76 3.104a.3.3 0 0 1-.49-.234V2.75a.5.5 0 0 1 .5-.5Z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </button>
+            </span>
+          </div>
+        </div>
       </div>
       <div className="outlier-body">
         <div className="outlier-title-row">

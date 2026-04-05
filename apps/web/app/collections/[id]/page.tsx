@@ -73,8 +73,7 @@ export default function CollectionPage({ params }: { params: Promise<{ id: strin
               durationSeconds: reference.durationSeconds,
               publishedAt: reference.publishedAt,
             }}
-            similarHref={`/discover/video/${reference.videoId}?mode=thumbnail`}
-            similarTopicsHref={`/discover/video/${reference.videoId}?mode=topic`}
+            similarHref={`/discover/video/${reference.videoId}`}
             similarChannelsHref={`/discover/channel/${reference.channelId}`}
           />
         ))}
