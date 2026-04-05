@@ -4,9 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
-  { href: "/discover", label: "Discover" },
-  { href: "/projects", label: "Projects" },
-  { href: "/settings", label: "Settings" },
+  { href: "/discover", label: "Browse" },
+  { href: "/tracked-channels", label: "Tracked Channels" },
+  { href: "/collections", label: "Collections" },
+  { href: "/settings", label: "Connections" },
 ];
 
 export function AppNav() {

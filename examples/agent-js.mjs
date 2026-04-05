@@ -5,11 +5,9 @@ const client = new OpenOutlierClient({
   apiKey: process.env.OPENOUTLIER_API_KEY ?? process.env.API_KEY ?? "",
 });
 
-const projectId = Number(process.env.OPENOUTLIER_PROJECT_ID ?? "1");
-const sourceSetId = process.env.OPENOUTLIER_SOURCE_SET_ID ? Number(process.env.OPENOUTLIER_SOURCE_SET_ID) : undefined;
+const collectionId = Number(process.env.OPENOUTLIER_COLLECTION_ID ?? "1");
 
-const search = await client.searchReferences(projectId, {
-  sourceSetId,
+const search = await client.searchReferences(collectionId, {
   contentType: "long",
   days: 365,
   minScore: 3,

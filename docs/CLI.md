@@ -7,13 +7,13 @@ The CLI is a thin wrapper around the API.
 ### Discover channels
 
 ```bash
-node apps/cli/dist/index.js discover --source-set 1 --query "premiere pro tutorials"
+node apps/cli/dist/index.js discover-tracked --query "premiere pro tutorials"
 ```
 
 ### Import one reference video
 
 ```bash
-node apps/cli/dist/index.js import-video --project 1 --video "https://www.youtube.com/watch?v=abc123xyz89"
+node apps/cli/dist/index.js import-video --collection 1 --video "https://www.youtube.com/watch?v=abc123xyz89"
 ```
 
 ### Trigger a scan

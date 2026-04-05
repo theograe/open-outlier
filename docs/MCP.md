@@ -9,11 +9,11 @@ The MCP server exposes OpenOutlier as a small research toolset.
 
 ## Available tools
 
-- `list_projects`
-- `create_project`
-- `get_project`
-- `discover_channels`
-- `add_channel_to_source_set`
+- `list_collections`
+- `create_collection`
+- `get_collection`
+- `discover_tracked_channels`
+- `add_tracked_channel`
 - `search_references`
 - `save_reference`
 - `import_reference_video`
@@ -22,9 +22,9 @@ The MCP server exposes OpenOutlier as a small research toolset.
 
 ## Typical flow
 
-1. create or select a project
-2. discover channels for a source set
-3. attach the best channels
+1. create or select a collection
+2. discover channels to track
+3. attach the best channels globally
 4. trigger a scan
 5. search references
 6. save the strongest references

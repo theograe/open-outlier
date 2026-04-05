@@ -13,6 +13,8 @@ import { registerScanRoutes } from "./routes/scan.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerAgentRoutes } from "./routes/agent.js";
 import { registerWorkflowRoutes } from "./routes/workflows.js";
+import { registerImageRoutes } from "./routes/images.js";
+import { registerTrackedChannelRoutes } from "./routes/tracked-channels.js";
 
 export function buildApp() {
   initializeDatabase();
@@ -30,7 +32,7 @@ export function buildApp() {
   }));
 
   app.addHook("onRequest", async (request, reply) => {
-    if (request.url === "/api/health") {
+    if (request.url === "/api/health" || request.url.startsWith("/api/images/remote")) {
       return;
     }
 
@@ -52,6 +54,8 @@ export function buildApp() {
   void registerSettingsRoutes(app, scanService);
   void registerAgentRoutes(app);
   void registerWorkflowRoutes(app, scanService);
+  void registerImageRoutes(app);
+  void registerTrackedChannelRoutes(app, scanService);
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof ZodError) {

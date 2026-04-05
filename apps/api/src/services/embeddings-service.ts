@@ -154,4 +154,61 @@ export class EmbeddingsService {
 
     return scores;
   }
+
+  async getQuerySimilarityScores(queryText: string, candidateIds: string[]): Promise<Map<string, number> | null> {
+    const uniqueIds = [...new Set(candidateIds)];
+    if (uniqueIds.length === 0) {
+      return null;
+    }
+
+    const providerKey = this.getOpenAiKey();
+    if (!providerKey) {
+      return null;
+    }
+
+    const mode = await this.ensureEmbeddings(uniqueIds);
+    if (mode !== "openai") {
+      return null;
+    }
+
+    const placeholders = uniqueIds.map(() => "?").join(", ");
+    const rows = db
+      .prepare(`SELECT video_id, embedding_json FROM video_text_embeddings WHERE video_id IN (${placeholders})`)
+      .all(...uniqueIds) as EmbeddingRow[];
+
+    const embeddings = new Map(rows.map((row) => [row.video_id, parseEmbedding(row.embedding_json)]));
+    const model = this.getEmbeddingsModel();
+    const response = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${providerKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        input: queryText,
+      }),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const json = (await response.json()) as { data?: Array<{ embedding: number[] }> };
+    const queryEmbedding = json.data?.[0]?.embedding;
+    if (!queryEmbedding) {
+      return null;
+    }
+
+    const scores = new Map<string, number>();
+    for (const candidateId of uniqueIds) {
+      const candidate = embeddings.get(candidateId);
+      if (!candidate) {
+        continue;
+      }
+      scores.set(candidateId, cosineSimilarity(queryEmbedding, candidate));
+    }
+
+    return scores;
+  }
 }

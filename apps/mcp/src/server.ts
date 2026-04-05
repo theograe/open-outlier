@@ -45,88 +45,82 @@ function textResult(payload: unknown) {
   };
 }
 
-server.registerTool("list_projects", {
-  description: "List OpenOutlier projects.",
-}, async () => textResult(await client.listProjects()));
+server.registerTool("list_collections", {
+  description: "List OpenOutlier collections.",
+}, async () => textResult(await client.listCollections()));
 
-server.registerTool("create_project", {
-  description: "Create a new OpenOutlier project.",
+server.registerTool("create_collection", {
+  description: "Create a new OpenOutlier collection.",
   inputSchema: z.object({
     name: z.string().min(1),
     niche: z.string().optional(),
     primaryChannelInput: z.string().optional(),
-    competitorSourceSetName: z.string().optional(),
   }),
-}, async (args) => textResult(await client.createProject(args)));
+}, async (args) => textResult(await client.createCollection(args)));
 
-server.registerTool("get_project", {
-  description: "Fetch one OpenOutlier project with source sets and saved references.",
+server.registerTool("get_collection", {
+  description: "Fetch one OpenOutlier collection with saved references.",
   inputSchema: z.object({
-    projectId: z.number().int(),
+    collectionId: z.number().int(),
   }),
-}, async ({ projectId }) => textResult(await client.getProject(projectId)));
+}, async ({ collectionId }) => textResult(await client.getCollection(collectionId)));
 
-server.registerTool("discover_channels", {
-  description: "Discover YouTube channels for a source set.",
+server.registerTool("discover_tracked_channels", {
+  description: "Discover YouTube channels to track.",
   inputSchema: z.object({
-    sourceSetId: z.number().int(),
     query: z.string().optional(),
     niche: z.string().optional(),
     limit: z.number().int().min(1).max(25).optional(),
     autoAttach: z.boolean().optional(),
   }),
-}, async ({ sourceSetId, ...input }) => textResult(await client.discoverChannels(sourceSetId, input)));
+}, async (input) => textResult(await client.discoverTrackedChannels(input)));
 
-server.registerTool("add_channel_to_source_set", {
-  description: "Attach a channel to a tracked source set.",
+server.registerTool("add_tracked_channel", {
+  description: "Track a channel globally for Browse.",
   inputSchema: z.object({
-    sourceSetId: z.number().int(),
     channelUrl: z.string().optional(),
     channelId: z.string().optional(),
     handle: z.string().optional(),
   }),
-}, async ({ sourceSetId, ...input }) => textResult(await client.addChannelToSourceSet(sourceSetId, input)));
+}, async (input) => textResult(await client.addTrackedChannel(input)));
 
 server.registerTool("search_references", {
-  description: "Search the scanned outlier feed for a project.",
+  description: "Search the scanned outlier feed for a collection.",
   inputSchema: z.object({
-    projectId: z.number().int(),
-    sourceSetId: z.number().int().optional(),
+    collectionId: z.number().int(),
     search: z.string().optional(),
     contentType: z.enum(["all", "long", "short"]).optional(),
     days: z.number().int().optional(),
-    sort: z.enum(["score", "views", "date", "velocity", "momentum"]).optional(),
+    sort: z.enum(["score", "views", "date", "momentum", "subscribers"]).optional(),
     order: z.enum(["asc", "desc"]).optional(),
     limit: z.number().int().optional(),
     minScore: z.number().optional(),
     maxScore: z.number().optional(),
     saveTop: z.number().int().optional(),
   }),
-}, async ({ projectId, ...input }) => textResult(await client.searchReferences(projectId, input)));
+}, async ({ collectionId, ...input }) => textResult(await client.searchReferences(collectionId, input)));
 
 server.registerTool("save_reference", {
-  description: "Save a video as a project reference.",
+  description: "Save a video into a collection.",
   inputSchema: z.object({
-    projectId: z.number().int(),
-    sourceSetId: z.number().int().optional(),
+    collectionId: z.number().int(),
     videoId: z.string(),
     notes: z.string().optional(),
     tags: z.array(z.string()).optional(),
   }),
-}, async ({ projectId, ...input }) => textResult(await client.saveReference(projectId, input)));
+}, async ({ collectionId, ...input }) => textResult(await client.saveReference(collectionId, input)));
 
 server.registerTool("import_reference_video", {
   description: "Import a single YouTube video directly as a saved reference.",
   inputSchema: z.object({
-    projectId: z.number().int(),
-    sourceSetId: z.number().int().optional(),
+    collectionId: z.number().int(),
     videoId: z.string().optional(),
     videoUrl: z.string().optional(),
   }),
-}, async ({ projectId, ...input }) => textResult(await client.importReferenceVideo(projectId, input)));
+}, async ({ collectionId, ...input }) => textResult(await client.importReferenceVideo(collectionId, input)));
 
 server.registerTool("trigger_scan", {
-  description: "Start a scan for a source set's backing list.",
+  description: "Start a scan for the tracked channel library.",
   inputSchema: z.object({
     listId: z.number().int().optional(),
   }),

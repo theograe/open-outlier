@@ -29,6 +29,7 @@ export class ScanService {
   private readonly youtubeClient = new YoutubeClient();
   private currentRunId: number | null = null;
   private scheduler: ScheduledTask | null = null;
+  private startupScanScheduled = false;
 
   startScheduler(): void {
     const cronExpression = getSetting("scan_schedule") ?? config.scanSchedule;
@@ -36,6 +37,13 @@ export class ScanService {
     this.scheduler = cron.schedule(cronExpression, () => {
       void this.triggerScan();
     });
+
+    if (!this.startupScanScheduled) {
+      this.startupScanScheduled = true;
+      setTimeout(() => {
+        void this.maybeRunStartupScan();
+      }, 1500);
+    }
   }
 
   updateSchedule(cronExpression: string): void {
@@ -133,6 +141,74 @@ export class ScanService {
     }
 
     return { runId };
+  }
+
+  async triggerChannelScan(channelId: string): Promise<{ runId: number } | null> {
+    if (this.currentRunId !== null) {
+      return null;
+    }
+
+    const channel = db
+      .prepare("SELECT id, name FROM channels WHERE id = ?")
+      .get(channelId) as { id: string; name: string } | undefined;
+
+    if (!channel) {
+      throw new Error("Channel not found.");
+    }
+
+    const startedAt = isoNow();
+    const insert = db
+      .prepare(`
+        INSERT INTO scan_runs (status, scope_list_id, started_at, progress_current, progress_total, message)
+        VALUES (?, ?, ?, 0, ?, ?)
+      `)
+      .run("running", null, startedAt, 1, `Scanning ${channel.name}`);
+
+    const runId = Number(insert.lastInsertRowid);
+    this.currentRunId = runId;
+
+    try {
+      this.updateRun(0, 1, `Scanning ${channel.name}`);
+      await this.scanChannel(channel.id);
+      this.finishRun("completed", `Scanned ${channel.name}.`);
+      return { runId };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unexpected scan error";
+      this.finishRun("failed", message);
+      throw error;
+    }
+  }
+
+  private async maybeRunStartupScan(): Promise<void> {
+    if (this.currentRunId !== null) {
+      return;
+    }
+
+    const channelCountRow = db.prepare("SELECT COUNT(*) AS total FROM channels").get() as { total: number };
+    if ((channelCountRow.total ?? 0) === 0) {
+      return;
+    }
+
+    const lastRun = db.prepare(`
+      SELECT completed_at, status
+      FROM scan_runs
+      WHERE status = 'completed'
+      ORDER BY id DESC
+      LIMIT 1
+    `).get() as { completed_at: string | null; status: string } | undefined;
+
+    if (lastRun?.completed_at) {
+      const hoursSinceLastRun = (Date.now() - new Date(lastRun.completed_at).getTime()) / (1000 * 60 * 60);
+      if (Number.isFinite(hoursSinceLastRun) && hoursSinceLastRun < 24) {
+        return;
+      }
+    }
+
+    try {
+      await this.triggerScan();
+    } catch {
+      // Ignore startup scan failures so local boot still succeeds.
+    }
   }
 
   private getChannelsForScan(listId?: number): Array<{ id: string; name: string }> {

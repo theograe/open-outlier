@@ -21,44 +21,20 @@ paths:
       responses:
         "200":
           description: OK
-  /api/projects:
+  /api/collections:
     get:
-      summary: List projects
+      summary: List collections
       responses:
         "200":
-          description: Projects returned
+          description: Collections returned
     post:
-      summary: Create project
+      summary: Create collection
       responses:
         "201":
-          description: Project created
-  /api/projects/{id}:
+          description: Collection created
+  /api/collections/{id}:
     get:
-      summary: Get project
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Project returned
-  /api/projects/{id}/source-sets:
-    post:
-      summary: Create source set
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: integer
-      responses:
-        "201":
-          description: Source set created
-  /api/source-sets/{id}:
-    get:
-      summary: Get source set
+      summary: Get collection
       parameters:
         - in: path
           name: id
@@ -67,28 +43,21 @@ paths:
             type: integer
       responses:
         "200":
-          description: Source set returned
-  /api/source-sets/{id}/channels:
+          description: Collection returned
+  /api/tracked-channels:
+    get:
+      summary: List tracked channels
+      responses:
+        "200":
+          description: Tracked channels returned
     post:
-      summary: Add channel to source set
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: integer
+      summary: Add tracked channel
       responses:
         "201":
-          description: Channel attached
-  /api/source-sets/{id}/discover:
+          description: Tracked channel added
+  /api/tracked-channels/discover:
     post:
-      summary: Discover channels for source set
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: integer
+      summary: Discover channels to track
       responses:
         "200":
           description: Suggestions returned
@@ -122,9 +91,9 @@ paths:
       responses:
         "200":
           description: Niche data returned
-  /api/projects/{id}/references/search:
+  /api/collections/{id}/references/search:
     post:
-      summary: Search references within a project
+      summary: Search references within a collection
       parameters:
         - in: path
           name: id
@@ -134,7 +103,7 @@ paths:
       responses:
         "200":
           description: Search results returned
-  /api/projects/{id}/references:
+  /api/collections/{id}/references:
     get:
       summary: List saved references
       parameters:
@@ -157,7 +126,7 @@ paths:
       responses:
         "201":
           description: Reference saved
-  /api/projects/{id}/references/import-video:
+  /api/collections/{id}/references/import-video:
     post:
       summary: Import one video as a reference
       parameters:

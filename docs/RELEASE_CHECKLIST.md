@@ -5,7 +5,7 @@
 - run `npm run lint`
 - run `npm run build`
 - run `npm run test`
-- verify a fresh project can:
+- verify a fresh collection can:
 - add channels
 - run a scan
 - search outliers

@@ -6,4 +6,5 @@ packages/*/dist
 .env
 .env.local
 data
+openoutlier.sqlite
 .DS_Store

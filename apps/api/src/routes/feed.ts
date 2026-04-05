@@ -26,6 +26,6 @@ export async function registerFeedRoutes(app: FastifyInstance): Promise<void> {
       maxDurationSeconds: z.coerce.number().optional(),
     });
 
-    return listDiscoverOutliers(querySchema.parse(request.query));
+    return await listDiscoverOutliers(querySchema.parse(request.query));
   });
 }

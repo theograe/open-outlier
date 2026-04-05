@@ -12,8 +12,7 @@ type ChannelResponse = {
   video_count: number;
   top_outlier_score: number | null;
   average_views: number | null;
-  projects: Array<{ id: number; name: string; relationship: string }>;
-  sourceSets: Array<{ id: number; name: string; role: string; relationship: string }>;
+  groups: Array<{ id: number; name: string; relationship: string }>;
   patternSummary: unknown;
   relatedChannels: unknown;
 };
@@ -45,30 +44,16 @@ export default function ChannelPage({ params }: { params: Promise<{ id: string }
             </div>
           </section>
 
-          <section className="grid-2">
-            <div className="panel">
-              <div className="eyebrow">Projects</div>
-              <div className="list" style={{ marginTop: 12 }}>
-                {channel.projects.map((project) => (
-                  <div key={project.id} className="list-row">
-                    <span>{project.name}</span>
-                    <span className="pill">{project.relationship}</span>
-                  </div>
-                ))}
-                {channel.projects.length === 0 ? <div className="subtle">Not attached to any projects.</div> : null}
-              </div>
-            </div>
-            <div className="panel alt">
-              <div className="eyebrow">Source sets</div>
-              <div className="list" style={{ marginTop: 12 }}>
-                {channel.sourceSets.map((sourceSet) => (
-                  <div key={sourceSet.id} className="list-row">
-                    <span>{sourceSet.name}</span>
-                    <span className="pill">{sourceSet.relationship}</span>
-                  </div>
-                ))}
-                {channel.sourceSets.length === 0 ? <div className="subtle">Not attached to any source sets.</div> : null}
-              </div>
+          <section className="panel">
+            <div className="eyebrow">Tracked In</div>
+            <div className="list" style={{ marginTop: 12 }}>
+              {channel.groups.map((group) => (
+                <div key={group.id} className="list-row">
+                  <span>{group.name}</span>
+                  <span className="pill">{group.relationship}</span>
+                </div>
+              ))}
+              {channel.groups.length === 0 ? <div className="subtle">Not attached to any tracked groups.</div> : null}
             </div>
           </section>
 

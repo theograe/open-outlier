@@ -5,102 +5,150 @@ import { apiFetch } from "../../lib/api";
 
 type SettingsResponse = {
   productName: string;
-  scanSchedule: string;
-  defaultOutlierThreshold: number;
-  embeddingsModel: string;
   youtubeApiKeyConfigured: boolean;
   apiKeyConfigured: boolean;
   openAiApiKeyConfigured: boolean;
 };
 
+type ScanStatus = {
+  running: boolean;
+  currentRun: null | {
+    startedAt: string;
+    progressCurrent: number;
+    progressTotal: number;
+    message: string;
+  };
+  lastRun: null | {
+    status: string;
+    completedAt: string | null;
+    message: string | null;
+  };
+};
+
+function ConnectionCard({
+  label,
+  description,
+  ready,
+  required = false,
+}: {
+  label: string;
+  description: string;
+  ready: boolean;
+  required?: boolean;
+}) {
+  return (
+    <div className="connection-card">
+      <div className="connection-card-row">
+        <strong>{label}</strong>
+        <span className={`connection-status ${ready ? "ready" : "missing"}`}>{ready ? "Connected" : "Missing"}</span>
+      </div>
+      <div className="subtle">{description}</div>
+      {required ? <div className="connection-required">Required</div> : <div className="connection-required optional">Optional</div>}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
-  const [scanSchedule, setScanSchedule] = useState("");
-  const [defaultOutlierThreshold, setDefaultOutlierThreshold] = useState("3");
-  const [embeddingsModel, setEmbeddingsModel] = useState("text-embedding-3-small");
-  const [message, setMessage] = useState("");
+  const [scanStatus, setScanStatus] = useState<ScanStatus | null>(null);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanStarted, setScanStarted] = useState(false);
+  const [error, setError] = useState("");
 
   async function load() {
-    const response = await apiFetch<SettingsResponse>("/api/settings");
-    setSettings(response);
-    setScanSchedule(response.scanSchedule);
-    setDefaultOutlierThreshold(String(response.defaultOutlierThreshold));
-    setEmbeddingsModel(response.embeddingsModel);
+    const [settingsResponse, scanStatusResponse] = await Promise.all([
+      apiFetch<SettingsResponse>("/api/settings"),
+      apiFetch<ScanStatus>("/api/scan/status"),
+    ]);
+
+    setSettings(settingsResponse);
+    setScanStatus(scanStatusResponse);
   }
 
   useEffect(() => {
     void load();
   }, []);
 
-  async function saveDefaults() {
-    await apiFetch("/api/settings", {
-      method: "PUT",
-      body: JSON.stringify({
-        defaultOutlierThreshold: Number(defaultOutlierThreshold),
-        embeddingsModel,
-      }),
-    });
-    setMessage("Saved discovery defaults.");
-    await load();
-  }
+  async function runScanNow() {
+    setScanLoading(true);
+    setScanStarted(false);
+    setError("");
 
-  async function saveSchedule() {
-    await apiFetch("/api/settings/scan-schedule", {
-      method: "PUT",
-      body: JSON.stringify({ cron: scanSchedule }),
-    });
-    setMessage("Saved scan schedule.");
-    await load();
+    try {
+      await apiFetch("/api/scan", {
+        method: "POST",
+      });
+      setScanStarted(true);
+      await load();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Failed to start scan.");
+    } finally {
+      setScanLoading(false);
+    }
   }
 
   return (
     <div className="stack">
       <header className="page-header">
         <div>
-          <div className="eyebrow">Settings</div>
-          <h1 className="headline">Keep discovery running smoothly</h1>
-          <p className="subtle">These settings only control scanning and how OpenOutlier ranks and groups outliers.</p>
+          <div className="eyebrow">Connections</div>
+          <h1 className="headline">Connect your local OpenOutlier setup</h1>
+          <p className="subtle">Add your keys to `.env`, restart the app, and OpenOutlier will auto-scan on startup when your data is stale.</p>
         </div>
       </header>
 
-      {message ? <section className="panel alt">{message}</section> : null}
+      {error ? <section className="panel">{error}</section> : null}
 
-      <section className="panel">
-        <h2 style={{ marginTop: 0 }}>Discovery defaults</h2>
-        <div className="form-grid">
-          <label className="field">
-            <span>Default outlier threshold</span>
-            <input value={defaultOutlierThreshold} onChange={(event) => setDefaultOutlierThreshold(event.target.value)} />
-          </label>
-          <label className="field">
-            <span>Embeddings model</span>
-            <input value={embeddingsModel} onChange={(event) => setEmbeddingsModel(event.target.value)} />
-          </label>
-          <div className="field" style={{ alignSelf: "end" }}>
-            <button className="button" onClick={() => void saveDefaults()}>Save defaults</button>
-          </div>
-        </div>
+      <section className="connection-grid">
+        <ConnectionCard
+          label="YouTube API"
+          description="Used to pull channels, videos, and outlier data."
+          ready={Boolean(settings?.youtubeApiKeyConfigured)}
+          required
+        />
+        <ConnectionCard
+          label="OpenAI API"
+          description="Used for topic similarity when embeddings are enabled."
+          ready={Boolean(settings?.openAiApiKeyConfigured)}
+        />
+        <ConnectionCard
+          label="Local API auth"
+          description="Only needed if you want to protect your local API for agents or external tools."
+          ready={Boolean(settings?.apiKeyConfigured)}
+        />
       </section>
 
-      <section className="panel">
-        <h2 style={{ marginTop: 0 }}>Scan schedule</h2>
-        <div className="form-grid">
-          <label className="field">
-            <span>Cron expression</span>
-            <input value={scanSchedule} onChange={(event) => setScanSchedule(event.target.value)} />
-          </label>
-          <div className="field" style={{ alignSelf: "end" }}>
-            <button className="button" onClick={() => void saveSchedule()}>Save schedule</button>
+      <section className="panel connection-panel">
+        <div className="connection-panel-head">
+          <div>
+            <div className="eyebrow">Local setup</div>
+            <h2 className="connection-title">Put keys in `.env`</h2>
           </div>
+          <button
+            type="button"
+            className={`button ${scanStarted ? "is-success" : ""}`}
+            onClick={() => void runScanNow()}
+            disabled={scanLoading || scanStarted}
+          >
+            {scanLoading ? "Starting..." : scanStarted ? "Scan started" : "Run scan now"}
+          </button>
         </div>
+        <pre className="env-snippet">{`YOUTUBE_API_KEY=...
+OPENAI_API_KEY=...`}</pre>
+        <div className="subtle">Restart the app after editing `.env`. On startup, OpenOutlier will run a scan automatically if you already have tracked channels and the last completed scan is older than 24 hours.</div>
       </section>
 
-      <section className="panel">
-        <h2 style={{ marginTop: 0 }}>Environment status</h2>
-        <div className="metrics">
-          <span className="pill">{settings?.youtubeApiKeyConfigured ? "YouTube key ready" : "YouTube key missing"}</span>
-          <span className="pill">{settings?.apiKeyConfigured ? "API key ready" : "API key missing"}</span>
-          <span className="pill">{settings?.openAiApiKeyConfigured ? "OpenAI key ready" : "OpenAI key missing"}</span>
+      <section className="panel connection-panel">
+        <div className="eyebrow">Scan status</div>
+        <div className="connection-status-list">
+          <div className="connection-status-item">
+            <span className="subtle">Current</span>
+            <strong>{scanStatus?.running ? scanStatus.currentRun?.message ?? "Running" : "Idle"}</strong>
+          </div>
+          <div className="connection-status-item">
+            <span className="subtle">Last run</span>
+            <strong>{scanStatus?.lastRun?.completedAt ? new Date(scanStatus.lastRun.completedAt).toLocaleString() : "No completed scan yet"}</strong>
+          </div>
         </div>
       </section>
     </div>

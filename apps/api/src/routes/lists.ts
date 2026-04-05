@@ -143,24 +143,4 @@ export async function registerListRoutes(app: FastifyInstance): Promise<void> {
     reply.code(204);
     return null;
   });
-
-  app.post("/api/collections", async (request, reply) => createListHandler(request, reply));
-  app.get("/api/collections", async () => db.prepare(listSummaryQuery).all());
-  app.get("/api/collections/:id", async (request, reply) => {
-    const id = Number((request.params as { id: string }).id);
-    const list = db.prepare("SELECT * FROM lists WHERE id = ?").get(id);
-    if (!list) {
-      return reply.notFound("Collection not found.");
-    }
-    const channels = db
-      .prepare(`
-        SELECT channels.id, channels.name, channels.handle, channels.subscriber_count, channels.thumbnail_url, channels.median_views, channels.last_scanned_at
-        FROM channels
-        INNER JOIN list_channels ON list_channels.channel_id = channels.id
-        WHERE list_channels.list_id = ?
-        ORDER BY channels.name
-      `)
-      .all(id);
-    return { ...list, channels };
-  });
 }

@@ -4,14 +4,14 @@ export type OpenOutlierClientOptions = {
   fetch?: typeof fetch;
 };
 
-export type Project = {
+export type Collection = {
   id: number;
   name: string;
   niche: string | null;
   status: string;
   primaryChannelId: string | null;
   primaryChannelName: string | null;
-  sourceSetCount: number;
+  channelCount: number;
   referenceCount: number;
   createdAt: string;
   updatedAt: string;
@@ -50,82 +50,97 @@ export class OpenOutlierClient {
     return this.request<{ ok: boolean; service: string; timestamp: string }>("/api/health", { headers: {} });
   }
 
-  listProjects() {
-    return this.request<Project[]>("/api/projects");
+  listCollections() {
+    return this.request<Collection[]>("/api/collections");
   }
 
-  createProject(input: {
+  createCollection(input: {
     name: string;
     niche?: string | null;
     primaryChannelInput?: string | null;
-    competitorSourceSetName?: string | null;
   }) {
-    return this.request<Record<string, unknown>>("/api/projects", {
+    return this.request<Record<string, unknown>>("/api/collections", {
       method: "POST",
       body: JSON.stringify(input),
     });
   }
 
-  getProject(projectId: number) {
-    return this.request<Record<string, unknown>>(`/api/projects/${projectId}`);
+  getCollection(collectionId: number) {
+    return this.request<Record<string, unknown>>(`/api/collections/${collectionId}`);
   }
 
-  createSourceSet(projectId: number, input: { name: string; role?: string; discoveryMode?: string }) {
-    return this.request<Record<string, unknown>>(`/api/projects/${projectId}/source-sets`, {
-      method: "POST",
-      body: JSON.stringify(input),
-    });
+  listTrackedChannels() {
+    return this.request<Record<string, unknown>[]>("/api/tracked-channels");
   }
 
-  getSourceSet(sourceSetId: number) {
-    return this.request<Record<string, unknown>>(`/api/source-sets/${sourceSetId}`);
-  }
-
-  addChannelToSourceSet(sourceSetId: number, input: {
+  addTrackedChannel(input: {
     channelUrl?: string;
     channelId?: string;
     handle?: string;
     relationship?: string;
   }) {
-    return this.request<Record<string, unknown>>(`/api/source-sets/${sourceSetId}/channels`, {
+    return this.request<Record<string, unknown>>("/api/tracked-channels", {
       method: "POST",
       body: JSON.stringify(input),
     });
   }
 
-  discoverChannels(sourceSetId: number, input: { query?: string; niche?: string; limit?: number; autoAttach?: boolean }) {
-    return this.request<Record<string, unknown>>(`/api/source-sets/${sourceSetId}/discover`, {
+  discoverTrackedChannels(input: { query?: string; niche?: string; limit?: number; autoAttach?: boolean }) {
+    return this.request<Record<string, unknown>>("/api/tracked-channels/discover", {
       method: "POST",
       body: JSON.stringify(input),
     });
   }
 
-  searchReferences(projectId: number, input: Record<string, unknown>) {
-    return this.request<Record<string, unknown>>(`/api/projects/${projectId}/references/search`, {
-      method: "POST",
-      body: JSON.stringify(input),
-    });
+  listReferences(collectionId: number) {
+    return this.request<Record<string, unknown>[]>(`/api/collections/${collectionId}/references`);
   }
 
-  listReferences(projectId: number) {
-    return this.request<Record<string, unknown>[]>(`/api/projects/${projectId}/references`);
-  }
-
-  saveReference(projectId: number, input: {
-    sourceSetId?: number | null;
+  saveReference(collectionId: number, input: {
     videoId: string;
     kind?: string;
     notes?: string | null;
     tags?: string[];
   }) {
-    return this.request<Record<string, unknown>>(`/api/projects/${projectId}/references`, {
+    return this.request<Record<string, unknown>>(`/api/collections/${collectionId}/references`, {
       method: "POST",
       body: JSON.stringify(input),
     });
   }
 
-  importReferenceVideo(projectId: number, input: { sourceSetId?: number | null; videoId?: string | null; videoUrl?: string | null }) {
-    return this.request<Record<string, unknown>>(`/api/projects/${projectId}/references/import-video`, {
+  importReferenceVideo(collectionId: number, input: { videoId?: string | null; videoUrl?: string | null }) {
+    return this.request<Record<string, unknown>>(`/api/collections/${collectionId}/references/import-video`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  listProjects() {
+    return this.listCollections();
+  }
+
+  createProject(input: { name: string; niche?: string | null; primaryChannelInput?: string | null }) {
+    return this.createCollection(input);
+  }
+
+  getProject(projectId: number) {
+    return this.getCollection(projectId);
+  }
+
+  listProjectChannels() {
+    return this.listTrackedChannels();
+  }
+
+  addChannelToProject(_projectId: number, input: { channelUrl?: string; channelId?: string; handle?: string; relationship?: string }) {
+    return this.addTrackedChannel(input);
+  }
+
+  discoverChannels(_projectId: number, input: { query?: string; niche?: string; limit?: number; autoAttach?: boolean }) {
+    return this.discoverTrackedChannels(input);
+  }
+
+  searchReferences(collectionId: number, input: Record<string, unknown>) {
+    return this.request<Record<string, unknown>>(`/api/collections/${collectionId}/references/search`, {
       method: "POST",
       body: JSON.stringify(input),
     });

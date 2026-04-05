@@ -1,27 +1,27 @@
 # OpenOutlier
 
-OpenOutlier is an open-source YouTube outlier finder. It helps you track channels in a niche, scan their recent uploads, surface standout videos, and save the best references for later.
+OpenOutlier is an open-source, local-first YouTube outlier finder.
 
-The product is intentionally narrow:
-- track your niche
-- discover competitors
-- scan channels
-- filter the outlier feed
-- save strong references
+It is built for one narrow job:
+- search YouTube for outliers in a niche
+- browse strong videos quickly
+- track interesting channels
+- save the best references into collections
 
 ## What ships in this MVP
 
-- Fastify API for projects, source sets, scanning, discovery, and saved references
-- Next.js local UI for projects, discover, and settings
+- Fastify API for discovery, tracked channels, collections, scans, and saved references
+- Next.js local UI for Browse, Collections, Tracked Channels, and Connections
 - SQLite storage for local/self-hosted use
 - agent-friendly REST API, TypeScript SDK, MCP server, and CLI
-- topic similarity for finding related outlier ideas
+- topic similarity and thumbnail similarity for browsing related outliers
 
-## Core model
+## Product model
 
-- `Project`: one niche or research focus
-- `Source Set`: a group of tracked channels inside a project
-- `Reference`: a saved outlier video worth studying
+- `Browse`: the main feed for finding outliers
+- `Tracked channels`: channels you want OpenOutlier to learn from and scan
+- `Collections`: saved-video folders for references you want to keep
+- `Connections`: API keys and local connection health
 
 ## Workspace layout
 
@@ -37,7 +37,7 @@ The product is intentionally narrow:
 
 - Node.js `20+`
 - a YouTube Data API key
-- optionally an OpenAI API key if you want embedding-backed topic similarity
+- optionally an OpenAI API key for embedding-backed similarity and channel niche matching
 - optionally an API key if you want to protect the API for local agents or external clients
 
 ## Quick start
@@ -63,6 +63,13 @@ NEXT_PUBLIC_OPENOUTLIER_API_URL=http://localhost:3001
 NEXT_PUBLIC_OPENOUTLIER_API_KEY=choose-a-long-random-string
 ```
 
+## How to use it
+
+1. Add your own channel or a few competitor channels to `Tracked channels`
+2. Let OpenOutlier scan them
+3. Use `Browse` to search a niche, pick a tracked source channel, or explore AI channel search
+4. Save strong outliers into `Collections`
+
 ## Scripts
 
 - `npm run dev`: run API and web locally
@@ -72,16 +79,17 @@ NEXT_PUBLIC_OPENOUTLIER_API_KEY=choose-a-long-random-string
 
 ## API highlights
 
-- `POST /api/projects`
-- `POST /api/projects/:id/source-sets`
-- `POST /api/source-sets/:id/channels`
-- `POST /api/source-sets/:id/discover`
-- `POST /api/scan`
+- `GET /api/tracked-channels`
+- `POST /api/tracked-channels`
+- `GET /api/collections`
+- `POST /api/collections`
 - `GET /api/discover/outliers`
-- `POST /api/projects/:id/references`
-- `POST /api/projects/:id/references/import-video`
+- `GET /api/discover/similar-topics`
+- `GET /api/discover/similar-thumbnails`
+- `POST /api/collections/:id/references`
+- `POST /api/scan`
 
-More detail lives in [docs/API.md](/Users/theograeser/Documents/outlier%20api/docs/API.md), with agent guidance in [docs/AGENTS.md](/Users/theograeser/Documents/outlier%20api/docs/AGENTS.md).
+More detail lives in `docs/API.md`, with agent guidance in `docs/AGENTS.md`.
 
 ## Agent integrations
 
@@ -95,11 +103,10 @@ OpenOutlier can be consumed four ways:
 For local open-source use, the simplest mode is to leave `API_KEY` unset.
 That means the local web UI works without a browser-exposed key, and local agents can call the API directly on `http://localhost:3001`.
 
-## Archived spike
+## Notes
 
-The previous thumbnail/adaptation work has been archived outside this repo at:
-
-`/Users/theograeser/Documents/openoutlier-archive-2026-04-03/discovery-studio-spike`
+- YouTube search is quota-limited. If your quota is exhausted, OpenOutlier falls back to the local scanned pool where possible.
+- The app is intentionally local-first, so some searches are slower than premium hosted tools that precompute large cloud indexes.
 
 ## License
 

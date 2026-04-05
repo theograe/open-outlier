@@ -259,6 +259,19 @@ export function createSqliteStorage(databasePath: string): SqliteStorage {
         PRIMARY KEY (project_id, channel_id)
       );
 
+      CREATE TABLE IF NOT EXISTS general_discovery_channels (
+        channel_id TEXT PRIMARY KEY REFERENCES channels(id) ON DELETE CASCADE,
+        source TEXT,
+        discovered_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        last_refreshed_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS tracked_channels (
+        channel_id TEXT PRIMARY KEY REFERENCES channels(id) ON DELETE CASCADE,
+        relationship TEXT NOT NULL DEFAULT 'competitor',
+        added_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+
       CREATE TABLE IF NOT EXISTS project_references (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         workspace_id INTEGER NOT NULL DEFAULT 1 REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -363,6 +376,13 @@ export function createSqliteStorage(databasePath: string): SqliteStorage {
       CREATE INDEX IF NOT EXISTS idx_boards_project_id ON boards(project_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_project_references_project_id ON project_references(project_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_workflow_runs_project_id ON workflow_runs(project_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_tracked_channels_added_at ON tracked_channels(added_at DESC);
+    `);
+
+    db.exec(`
+      INSERT OR IGNORE INTO tracked_channels (channel_id, relationship)
+      SELECT DISTINCT channel_id, relationship
+      FROM project_channels
     `);
 
     db.prepare(`

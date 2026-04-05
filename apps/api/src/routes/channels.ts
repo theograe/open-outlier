@@ -23,7 +23,7 @@ export async function registerChannelRoutes(app: FastifyInstance): Promise<void>
       return reply.notFound("Channel not found.");
     }
 
-    const projects = db
+    const groups = db
       .prepare(`
         SELECT projects.id, projects.name, project_channels.relationship
         FROM projects
@@ -33,22 +33,11 @@ export async function registerChannelRoutes(app: FastifyInstance): Promise<void>
       `)
       .all(id);
 
-    const sourceSets = db
-      .prepare(`
-        SELECT source_sets.id, source_sets.name, source_sets.role, source_set_channels.relationship
-        FROM source_sets
-        INNER JOIN source_set_channels ON source_set_channels.source_set_id = source_sets.id
-        WHERE source_set_channels.channel_id = ?
-        ORDER BY source_sets.name
-      `)
-      .all(id);
-
     return {
       ...channel,
-      projects,
-      sourceSets,
+      groups,
       patternSummary: getChannelPatterns(id),
-      relatedChannels: getRelatedChannels(id),
+      relatedChannels: await getRelatedChannels(id),
     };
   });
 

@@ -14,7 +14,7 @@ type ProjectRecord = {
   updated_at: string;
 };
 
-type SourceSetRecord = {
+type BackingGroupRecord = {
   id: number;
   project_id: number;
   backing_list_id: number | null;
@@ -64,9 +64,10 @@ function slugify(value: string): string {
 
 export class WorkflowService {
   private readonly youtube = new YoutubeClient();
+  private readonly scanService?: ScanService;
 
-  constructor(_unusedScanService?: ScanService) {
-    void _unusedScanService;
+  constructor(scanService?: ScanService) {
+    this.scanService = scanService;
   }
 
   listProjects() {
@@ -74,11 +75,19 @@ export class WorkflowService {
       SELECT
         projects.*,
         channels.name AS primaryChannelName,
-        COUNT(DISTINCT source_sets.id) AS sourceSetCount,
-        COUNT(DISTINCT project_references.id) AS referenceCount
+        COUNT(DISTINCT project_channels.channel_id) AS channelCount,
+        COUNT(DISTINCT project_references.id) AS referenceCount,
+        (
+          SELECT videos.thumbnail_url
+          FROM project_references preview_refs
+          INNER JOIN videos ON videos.id = preview_refs.video_id
+          WHERE preview_refs.project_id = projects.id
+          ORDER BY preview_refs.created_at DESC
+          LIMIT 1
+        ) AS previewThumbnailUrl
       FROM projects
       LEFT JOIN channels ON channels.id = projects.primary_channel_id
-      LEFT JOIN source_sets ON source_sets.project_id = projects.id
+      LEFT JOIN project_channels ON project_channels.project_id = projects.id
       LEFT JOIN project_references ON project_references.project_id = projects.id
       GROUP BY projects.id
       ORDER BY projects.updated_at DESC, projects.created_at DESC
@@ -91,8 +100,9 @@ export class WorkflowService {
       status: String(row.status),
       primaryChannelId: row.primary_channel_id ? String(row.primary_channel_id) : null,
       primaryChannelName: row.primaryChannelName ? String(row.primaryChannelName) : null,
-      sourceSetCount: Number(row.sourceSetCount ?? 0),
+      channelCount: Number(row.channelCount ?? 0),
       referenceCount: Number(row.referenceCount ?? 0),
+      previewThumbnailUrl: row.previewThumbnailUrl ? String(row.previewThumbnailUrl) : null,
       createdAt: String(row.created_at),
       updatedAt: String(row.updated_at),
     }));
@@ -102,7 +112,6 @@ export class WorkflowService {
     name: string;
     niche?: string | null;
     primaryChannelInput?: string | null;
-    competitorSourceSetName?: string | null;
   }) {
     let primaryChannel: ResolvedChannel | null = null;
     if (input.primaryChannelInput?.trim()) {
@@ -118,11 +127,7 @@ export class WorkflowService {
     `).run(input.name, slug, input.niche ?? null, primaryChannel?.channelId ?? null);
 
     const projectId = Number(result.lastInsertRowid);
-    this.createSourceSet(projectId, {
-      name: input.competitorSourceSetName ?? "Tracked Channels",
-      role: "competitors",
-      discoveryMode: "manual",
-    });
+    this.ensureProjectBackingGroup(projectId);
 
     return this.getProject(projectId);
   }
@@ -133,15 +138,18 @@ export class WorkflowService {
       throw new Error("Project not found.");
     }
 
-    const sourceSets = db.prepare(`
+    const trackedChannels = db.prepare(`
       SELECT
-        source_sets.*,
-        COUNT(source_set_channels.channel_id) AS channelCount
-      FROM source_sets
-      LEFT JOIN source_set_channels ON source_set_channels.source_set_id = source_sets.id
-      WHERE source_sets.project_id = ?
-      GROUP BY source_sets.id
-      ORDER BY source_sets.created_at ASC
+        channels.id,
+        channels.name,
+        channels.handle,
+        channels.subscriber_count AS subscriberCount,
+        channels.thumbnail_url AS thumbnailUrl,
+        project_channels.relationship
+      FROM project_channels
+      INNER JOIN channels ON channels.id = project_channels.channel_id
+      WHERE project_channels.project_id = ?
+      ORDER BY channels.subscriber_count DESC, channels.name ASC
     `).all(projectId) as Array<Record<string, unknown>>;
 
     const references = db.prepare(`
@@ -173,13 +181,14 @@ export class WorkflowService {
       status: project.status,
       createdAt: project.created_at,
       updatedAt: project.updated_at,
-      sourceSets: sourceSets.map((row) => ({
-        id: Number(row.id),
+      channelCount: trackedChannels.length,
+      trackedChannels: trackedChannels.map((row) => ({
+        id: String(row.id),
         name: String(row.name),
-        role: String(row.role),
-        discoveryMode: String(row.discovery_mode),
-        backingListId: row.backing_list_id ? Number(row.backing_list_id) : null,
-        channelCount: Number(row.channelCount ?? 0),
+        handle: row.handle ? String(row.handle) : null,
+        subscriberCount: Number(row.subscriberCount ?? 0),
+        thumbnailUrl: row.thumbnailUrl ? String(row.thumbnailUrl) : null,
+        relationship: String(row.relationship),
       })),
       references: references.map((row) => ({
         id: Number(row.id),
@@ -197,76 +206,54 @@ export class WorkflowService {
     };
   }
 
-  createSourceSet(projectId: number, input: { name: string; role?: string; discoveryMode?: string }) {
-    const project = db.prepare("SELECT name FROM projects WHERE id = ?").get(projectId) as { name: string } | undefined;
-    if (!project) {
+  deleteProject(projectId: number) {
+    const existing = db.prepare("SELECT id FROM projects WHERE id = ?").get(projectId) as { id: number } | undefined;
+    if (!existing) {
       throw new Error("Project not found.");
     }
 
-    const listResult = db.prepare(`
-      INSERT INTO lists (name, description, updated_at)
-      VALUES (?, ?, CURRENT_TIMESTAMP)
-    `).run(`${project.name}: ${input.name}`, `Backing list for source set ${input.name}`);
+    const backingListIds = (
+      db.prepare("SELECT backing_list_id FROM source_sets WHERE project_id = ? AND backing_list_id IS NOT NULL").all(projectId) as Array<{ backing_list_id: number }>
+    ).map((row) => row.backing_list_id);
 
-    const sourceSetResult = db.prepare(`
-      INSERT INTO source_sets (project_id, backing_list_id, name, role, discovery_mode, updated_at)
-      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `).run(projectId, Number(listResult.lastInsertRowid), input.name, input.role ?? "competitors", input.discoveryMode ?? "manual");
+    const deleteTransaction = db.transaction(() => {
+      db.prepare("DELETE FROM projects WHERE id = ?").run(projectId);
 
-    return this.getSourceSet(Number(sourceSetResult.lastInsertRowid));
+      for (const listId of backingListIds) {
+        db.prepare("DELETE FROM lists WHERE id = ?").run(listId);
+      }
+    });
+
+    deleteTransaction();
   }
 
-  listSourceSets(projectId: number) {
+  listProjectChannels(projectId: number) {
     return db.prepare(`
       SELECT
-        source_sets.*,
-        COUNT(source_set_channels.channel_id) AS channelCount
-      FROM source_sets
-      LEFT JOIN source_set_channels ON source_set_channels.source_set_id = source_sets.id
-      WHERE source_sets.project_id = ?
-      GROUP BY source_sets.id
-      ORDER BY source_sets.created_at ASC
+        channels.id,
+        channels.name,
+        channels.handle,
+        channels.subscriber_count AS subscriberCount,
+        channels.thumbnail_url AS thumbnailUrl,
+        project_channels.relationship
+      FROM project_channels
+      INNER JOIN channels ON channels.id = project_channels.channel_id
+      WHERE project_channels.project_id = ?
+      ORDER BY channels.subscriber_count DESC, channels.name ASC
     `).all(projectId).map((row) => ({
-      id: Number((row as Record<string, unknown>).id),
+      id: String((row as Record<string, unknown>).id),
       name: String((row as Record<string, unknown>).name),
-      role: String((row as Record<string, unknown>).role),
-      discoveryMode: String((row as Record<string, unknown>).discovery_mode),
-      backingListId: (row as Record<string, unknown>).backing_list_id ? Number((row as Record<string, unknown>).backing_list_id) : null,
-      channelCount: Number((row as Record<string, unknown>).channelCount ?? 0),
+      handle: (row as Record<string, unknown>).handle ? String((row as Record<string, unknown>).handle) : null,
+      subscriberCount: Number((row as Record<string, unknown>).subscriberCount ?? 0),
+      thumbnailUrl: (row as Record<string, unknown>).thumbnailUrl ? String((row as Record<string, unknown>).thumbnailUrl) : null,
+      relationship: String((row as Record<string, unknown>).relationship),
     }));
   }
 
-  getSourceSet(sourceSetId: number) {
-    const sourceSet = db.prepare("SELECT * FROM source_sets WHERE id = ?").get(sourceSetId) as SourceSetRecord | undefined;
-    if (!sourceSet) {
-      throw new Error("Source set not found.");
-    }
-
-    const channels = db.prepare(`
-      SELECT channels.id, channels.name, channels.handle, channels.subscriber_count AS subscriberCount
-      FROM channels
-      INNER JOIN source_set_channels ON source_set_channels.channel_id = channels.id
-      WHERE source_set_channels.source_set_id = ?
-      ORDER BY channels.subscriber_count DESC, channels.name ASC
-    `).all(sourceSetId);
-
-    return {
-      id: sourceSet.id,
-      projectId: sourceSet.project_id,
-      backingListId: sourceSet.backing_list_id,
-      name: sourceSet.name,
-      role: sourceSet.role,
-      discoveryMode: sourceSet.discovery_mode,
-      channels,
-      createdAt: sourceSet.created_at,
-      updatedAt: sourceSet.updated_at,
-    };
-  }
-
-  async addChannelToSourceSet(sourceSetId: number, input: { channelUrl?: string; channelId?: string; handle?: string; relationship?: string }) {
-    const sourceSet = db.prepare("SELECT * FROM source_sets WHERE id = ?").get(sourceSetId) as SourceSetRecord | undefined;
-    if (!sourceSet) {
-      throw new Error("Source set not found.");
+  async addChannelToProject(projectId: number, input: { channelUrl?: string; channelId?: string; handle?: string; relationship?: string }) {
+    const backingGroup = this.getProjectBackingGroup(projectId);
+    if (!backingGroup) {
+      throw new Error("Project not found.");
     }
 
     const channelInput = input.channelUrl ?? input.channelId ?? input.handle;
@@ -276,24 +263,25 @@ export class WorkflowService {
 
     const channel = await this.youtube.resolveChannel(channelInput);
     this.persistChannel(channel);
-    this.attachChannelToSourceSet(sourceSet, channel.channelId, input.relationship ?? "competitor");
+    this.attachChannelToProject(backingGroup, channel.channelId, input.relationship ?? "competitor");
+    void this.scanService?.triggerChannelScan(channel.channelId).catch(() => undefined);
     return channel;
   }
 
-  async discoverChannels(sourceSetId: number, input: { query?: string; niche?: string; limit?: number; autoAttach?: boolean }) {
-    const sourceSet = db.prepare("SELECT * FROM source_sets WHERE id = ?").get(sourceSetId) as SourceSetRecord | undefined;
-    if (!sourceSet) {
-      throw new Error("Source set not found.");
+  async discoverProjectChannels(projectId: number, input: { query?: string; niche?: string; limit?: number; autoAttach?: boolean }) {
+    const backingGroup = this.getProjectBackingGroup(projectId);
+    if (!backingGroup) {
+      throw new Error("Project not found.");
     }
 
-    const project = db.prepare("SELECT * FROM projects WHERE id = ?").get(sourceSet.project_id) as ProjectRecord | undefined;
-    const searchQuery = input.query?.trim() || input.niche?.trim() || project?.niche || sourceSet.name;
+    const project = db.prepare("SELECT * FROM projects WHERE id = ?").get(projectId) as ProjectRecord | undefined;
+    const searchQuery = input.query?.trim() || input.niche?.trim() || project?.niche || project?.name;
     if (!searchQuery) {
       throw new Error("Provide a discovery query or niche.");
     }
 
     const existingIds = new Set(
-      (db.prepare("SELECT channel_id FROM source_set_channels WHERE source_set_id = ?").all(sourceSetId) as Array<{ channel_id: string }>).map((row) => row.channel_id),
+      (db.prepare("SELECT channel_id FROM project_channels WHERE project_id = ?").all(projectId) as Array<{ channel_id: string }>).map((row) => row.channel_id),
     );
 
     const suggestions = (await this.youtube.searchChannels(searchQuery, input.limit ?? 10))
@@ -309,25 +297,60 @@ export class WorkflowService {
       for (const suggestion of suggestions) {
         const channel = await this.youtube.fetchChannelById(suggestion.channelId);
         this.persistChannel(channel);
-        this.attachChannelToSourceSet(sourceSet, channel.channelId, "discovered");
+        this.attachChannelToProject(backingGroup, channel.channelId, "discovered");
       }
     }
 
     return {
-      sourceSetId,
+      projectId,
       query: searchQuery,
       suggestions,
       attachedCount: input.autoAttach ? suggestions.length : 0,
     };
   }
 
-  searchReferences(projectId: number, input: Partial<DiscoverQuery> & { sourceSetId?: number; saveTop?: number }) {
-    const sourceSet = input.sourceSetId
-      ? (db.prepare("SELECT backing_list_id FROM source_sets WHERE id = ? AND project_id = ?").get(input.sourceSetId, projectId) as { backing_list_id: number | null } | undefined)
-      : (db.prepare("SELECT backing_list_id FROM source_sets WHERE project_id = ? ORDER BY id ASC LIMIT 1").get(projectId) as { backing_list_id: number | null } | undefined);
+  private createBackingGroup(projectId: number, input: { name: string; role?: string; discoveryMode?: string }) {
+    const project = db.prepare("SELECT name FROM projects WHERE id = ?").get(projectId) as { name: string } | undefined;
+    if (!project) {
+      throw new Error("Project not found.");
+    }
 
-    const result = listDiscoverOutliers({
-      listId: sourceSet?.backing_list_id ?? undefined,
+    const listResult = db.prepare(`
+      INSERT INTO lists (name, description, updated_at)
+      VALUES (?, ?, CURRENT_TIMESTAMP)
+    `).run(`${project.name}: ${input.name}`, `Backing list for source set ${input.name}`);
+
+    const backingGroupResult = db.prepare(`
+      INSERT INTO source_sets (project_id, backing_list_id, name, role, discovery_mode, updated_at)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).run(projectId, Number(listResult.lastInsertRowid), input.name, input.role ?? "competitors", input.discoveryMode ?? "manual");
+
+    return db.prepare("SELECT * FROM source_sets WHERE id = ?").get(Number(backingGroupResult.lastInsertRowid)) as BackingGroupRecord;
+  }
+
+  private ensureProjectBackingGroup(projectId: number) {
+    const existing = this.getProjectBackingGroup(projectId);
+    if (existing) {
+      return existing;
+    }
+    return this.createBackingGroup(projectId, {
+      name: "Tracked Channels",
+      role: "competitors",
+      discoveryMode: "manual",
+    });
+  }
+
+  private getProjectBackingGroup(projectId: number) {
+    return db.prepare("SELECT * FROM source_sets WHERE project_id = ? ORDER BY id ASC LIMIT 1").get(projectId) as BackingGroupRecord | undefined;
+  }
+
+  async searchReferences(projectId: number, input: Partial<DiscoverQuery> & { saveTop?: number }) {
+    const backingGroup = db.prepare("SELECT backing_list_id FROM source_sets WHERE project_id = ? ORDER BY id ASC LIMIT 1").get(projectId) as
+      | { backing_list_id: number | null }
+      | undefined;
+
+    const result = await listDiscoverOutliers({
+      listId: backingGroup?.backing_list_id ?? undefined,
       days: input.days ?? 365,
       sort: input.sort ?? "momentum",
       order: input.order ?? "desc",
@@ -347,14 +370,12 @@ export class WorkflowService {
       maxDurationSeconds: input.maxDurationSeconds,
       channelId: input.channelId,
       projectId,
-      sourceSetId: input.sourceSetId,
     });
 
     const savedReferenceIds: number[] = [];
     const topToSave = Math.max(0, input.saveTop ?? 0);
     for (const video of result.videos.slice(0, topToSave) as Array<Record<string, unknown>>) {
       const saved = this.saveReference(projectId, {
-        sourceSetId: input.sourceSetId ?? null,
         videoId: String(video.videoId),
         kind: "outlier",
         tags: ["saved-from-search"],
@@ -368,7 +389,7 @@ export class WorkflowService {
     };
   }
 
-  saveReference(projectId: number, input: { sourceSetId?: number | null; videoId: string; kind?: string; notes?: string | null; tags?: string[] }) {
+  saveReference(projectId: number, input: { videoId: string; kind?: string; notes?: string | null; tags?: string[] }) {
     const result = db.prepare(`
       INSERT INTO project_references (project_id, source_set_id, video_id, kind, notes, tags_json)
       VALUES (?, ?, ?, ?, ?, ?)
@@ -378,7 +399,7 @@ export class WorkflowService {
         notes = excluded.notes,
         tags_json = excluded.tags_json
       RETURNING id
-    `).get(projectId, input.sourceSetId ?? null, input.videoId, input.kind ?? "outlier", input.notes ?? null, JSON.stringify(input.tags ?? [])) as { id: number };
+    `).get(projectId, null, input.videoId, input.kind ?? "outlier", input.notes ?? null, JSON.stringify(input.tags ?? [])) as { id: number };
 
     return { id: Number(result.id), videoId: input.videoId };
   }
@@ -387,18 +408,22 @@ export class WorkflowService {
     const rows = db.prepare(`
       SELECT
         project_references.id,
-        project_references.source_set_id AS sourceSetId,
         project_references.video_id AS videoId,
         project_references.kind,
         project_references.notes,
         project_references.tags_json AS tagsJson,
         project_references.created_at AS createdAt,
         videos.title,
+        videos.thumbnail_url AS thumbnailUrl,
         videos.outlier_score AS outlierScore,
         videos.view_velocity AS viewVelocity,
         videos.views,
         videos.published_at AS publishedAt,
-        channels.name AS channelName
+        videos.duration_seconds AS durationSeconds,
+        channels.id AS channelId,
+        channels.name AS channelName,
+        channels.subscriber_count AS channelSubscribers,
+        channels.median_views AS channelMedianViews
       FROM project_references
       INNER JOIN videos ON videos.id = project_references.video_id
       INNER JOIN channels ON channels.id = videos.channel_id
@@ -408,30 +433,32 @@ export class WorkflowService {
 
     return rows.map((row) => ({
       id: Number(row.id),
-      sourceSetId: row.sourceSetId ? Number(row.sourceSetId) : null,
       videoId: String(row.videoId),
       title: String(row.title),
+      thumbnailUrl: row.thumbnailUrl ? String(row.thumbnailUrl) : null,
+      channelId: String(row.channelId),
       channelName: String(row.channelName),
+      channelSubscribers: Number(row.channelSubscribers ?? 0),
+      channelMedianViews: Number(row.channelMedianViews ?? 0),
       kind: String(row.kind),
       notes: row.notes ? String(row.notes) : null,
       tags: parseJson(String(row.tagsJson), [] as string[]),
       outlierScore: Number(row.outlierScore ?? 0),
       viewVelocity: Number(row.viewVelocity ?? 0),
       views: Number(row.views ?? 0),
+      durationSeconds: Number(row.durationSeconds ?? 0),
       publishedAt: row.publishedAt ? String(row.publishedAt) : null,
       createdAt: String(row.createdAt),
     }));
   }
 
-  async importReferenceVideo(projectId: number, sourceSetId: number | null, videoInput: string) {
+  async importReferenceVideo(projectId: number, videoInput: string) {
     const videoId = extractVideoId(videoInput);
     if (!videoId) {
       throw new Error("Invalid video URL or video ID.");
     }
 
-    const sourceSet = sourceSetId
-      ? (db.prepare("SELECT * FROM source_sets WHERE id = ?").get(sourceSetId) as SourceSetRecord | undefined)
-      : undefined;
+    const backingGroup = this.getProjectBackingGroup(projectId) ?? this.ensureProjectBackingGroup(projectId);
 
     const [video] = await this.youtube.fetchVideos([videoId]);
     if (!video) {
@@ -444,9 +471,7 @@ export class WorkflowService {
 
     const channel = await this.youtube.fetchChannelById(video.channelId);
     this.persistChannel(channel);
-    if (sourceSet) {
-      this.attachChannelToSourceSet(sourceSet, channel.channelId, "reference_source");
-    }
+    this.attachChannelToProject(backingGroup, channel.channelId, "reference_source");
 
     const channelRow = db.prepare("SELECT median_views, subscriber_count FROM channels WHERE id = ?").get(channel.channelId) as
       | { median_views: number | null; subscriber_count: number | null }
@@ -503,7 +528,6 @@ export class WorkflowService {
     );
 
     const reference = this.saveReference(projectId, {
-      sourceSetId,
       videoId: video.id,
       kind: "imported_video",
       tags: ["seed-video"],
@@ -536,25 +560,25 @@ export class WorkflowService {
     );
   }
 
-  private attachChannelToSourceSet(sourceSet: SourceSetRecord, channelId: string, relationship: string) {
+  private attachChannelToProject(backingGroup: BackingGroupRecord, channelId: string, relationship: string) {
     db.prepare(`
       INSERT INTO source_set_channels (source_set_id, channel_id, relationship)
       VALUES (?, ?, ?)
       ON CONFLICT(source_set_id, channel_id) DO UPDATE SET relationship = excluded.relationship
-    `).run(sourceSet.id, channelId, relationship);
+    `).run(backingGroup.id, channelId, relationship);
 
     db.prepare(`
       INSERT INTO project_channels (project_id, channel_id, relationship)
       VALUES (?, ?, ?)
       ON CONFLICT(project_id, channel_id) DO UPDATE SET relationship = excluded.relationship
-    `).run(sourceSet.project_id, channelId, relationship);
+    `).run(backingGroup.project_id, channelId, relationship);
 
-    if (sourceSet.backing_list_id) {
+    if (backingGroup.backing_list_id) {
       db.prepare(`
         INSERT INTO list_channels (list_id, channel_id)
         VALUES (?, ?)
         ON CONFLICT(list_id, channel_id) DO NOTHING
-      `).run(sourceSet.backing_list_id, channelId);
+      `).run(backingGroup.backing_list_id, channelId);
     }
   }
 }

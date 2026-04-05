@@ -52,6 +52,12 @@ type YoutubeVideo = {
   };
 };
 
+type YoutubeSearchVideoItem = {
+  id?: {
+    videoId?: string;
+  };
+};
+
 export type ResolvedChannel = {
   channelId: string;
   channelName: string;
@@ -132,6 +138,37 @@ export class YoutubeClient {
     });
 
     return (channels.items ?? []).map((channel) => this.mapChannel(channel));
+  }
+
+  async listMostPopularVideoIds(regionCode = "US", maxResults = 25): Promise<string[]> {
+    const response = await this.request<{ items?: YoutubeVideo[] }>("videos", {
+      part: "id",
+      chart: "mostPopular",
+      regionCode,
+      maxResults: String(Math.min(Math.max(maxResults, 1), 50)),
+    });
+
+    return (response.items ?? []).map((item) => item.id).filter(Boolean);
+  }
+
+  async searchVideoIds(
+    query: string,
+    maxResults = 10,
+    publishedAfter?: string,
+    order: "date" | "rating" | "relevance" | "title" | "videoCount" | "viewCount" = "relevance",
+  ): Promise<string[]> {
+    const response = await this.request<{ items?: YoutubeSearchVideoItem[] }>("search", {
+      part: "snippet",
+      type: "video",
+      q: query,
+      order,
+      maxResults: String(Math.min(Math.max(maxResults, 1), 25)),
+      relevanceLanguage: "en",
+      regionCode: "US",
+      publishedAfter,
+    });
+
+    return (response.items ?? []).map((item) => item.id?.videoId).filter(Boolean) as string[];
   }
 
   async listRecentUploadVideoIds(uploadsPlaylistId: string, publishedAfter: Date): Promise<string[]> {

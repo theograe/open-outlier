@@ -14,59 +14,121 @@ If `API_KEY` is not set, local requests work without auth.
 
 Returns service health.
 
-## Projects
+## Tracked channels
 
-### `GET /api/projects`
+### `GET /api/tracked-channels`
 
-List projects.
+List tracked channels.
 
-### `POST /api/projects`
+### `POST /api/tracked-channels`
 
-Create a project.
-
-```json
-{
-  "name": "Editing educators",
-  "niche": "English video editing tutorials",
-  "primaryChannelInput": "@yourchannel"
-}
-```
-
-### `GET /api/projects/:id`
-
-Return one project with source sets and saved references.
-
-## Source sets
-
-### `POST /api/projects/:id/source-sets`
-
-Create a source set.
-
-### `GET /api/source-sets/:id`
-
-Fetch one source set with tracked channels.
-
-### `POST /api/source-sets/:id/channels`
-
-Attach a channel to a source set.
+Track a channel globally.
 
 ```json
 {
-  "handle": "@the_nicks_edit"
+  "channelId": "UC123...",
+  "relationship": "competitor"
 }
 ```
 
-### `POST /api/source-sets/:id/discover`
+### `POST /api/tracked-channels/discover`
 
-Discover competitor channels for a source set.
+Discover channels from a query.
 
 ```json
 {
   "query": "premiere pro tutorials",
-  "limit": 8,
-  "autoAttach": false
+  "limit": 8
 }
 ```
+
+## Collections
+
+### `GET /api/collections`
+
+List collections.
+
+### `POST /api/collections`
+
+Create a collection.
+
+```json
+{
+  "name": "Editing references"
+}
+```
+
+### `GET /api/collections/:id/references`
+
+List saved references in a collection.
+
+### `POST /api/collections/:id/references`
+
+Save a video into a collection.
+
+```json
+{
+  "videoId": "abc123xyz89",
+  "kind": "outlier",
+  "tags": ["editing", "hook"]
+}
+```
+
+## Discovery
+
+### `GET /api/discover/outliers`
+
+Search the outlier feed.
+
+Useful query params:
+- `search`
+- `seedChannelId`
+- `generalMode=true`
+- `contentType=all|long|short`
+- `days`
+- `minScore`
+- `maxScore`
+- `minViews`
+- `maxViews`
+- `minSubscribers`
+- `maxSubscribers`
+- `minDurationSeconds`
+- `maxDurationSeconds`
+- `sort=momentum|score|views|date|subscribers`
+- `order=asc|desc`
+- `limit`
+
+Notes:
+- `seedChannelId` tells OpenOutlier to infer a niche from that channel and search for related outliers.
+- `generalMode=true` is the broad AI channel search mode.
+- when YouTube quota is exhausted, the response can include:
+
+```json
+{
+  "warning": {
+    "code": "YOUTUBE_QUOTA_EXCEEDED",
+    "message": "..."
+  }
+}
+```
+
+In that case, OpenOutlier is falling back to the local scanned library where possible.
+
+### `GET /api/discover/similar-topics?videoId=...`
+
+Return title/topic-neighbor videos.
+
+### `GET /api/discover/similar-thumbnails?videoId=...`
+
+Return visually similar thumbnails.
+
+### `GET /api/discover/video/:videoId`
+
+Return one normalized video payload for the Browse UI.
+
+### `GET /api/discover/niches`
+
+Return topic clusters from recent outliers.
 
 ## Scanning
 
@@ -83,75 +145,3 @@ Start a scan.
 ### `GET /api/scan/status`
 
 Fetch current scan status.
-
-## Discovery
-
-### `GET /api/discover/outliers`
-
-Search the scanned outlier feed.
-
-Useful query params:
-- `projectId`
-- `sourceSetId`
-- `search`
-- `contentType=all|long|short`
-- `days`
-- `minScore`
-- `minViews`
-- `minSubscribers`
-- `minVelocity`
-- `sort=score|views|date|velocity|momentum`
-- `order=asc|desc`
-- `limit`
-
-### `GET /api/discover/similar-topics?videoId=...`
-
-Return title/topic-neighbor videos.
-
-### `GET /api/discover/niches`
-
-Return topic clusters from recent outliers.
-
-## References
-
-### `POST /api/projects/:id/references/search`
-
-Search within a project and optionally auto-save the top results.
-
-```json
-{
-  "sourceSetId": 1,
-  "contentType": "long",
-  "days": 365,
-  "minScore": 3,
-  "sort": "momentum",
-  "saveTop": 5
-}
-```
-
-### `GET /api/projects/:id/references`
-
-List saved references for a project.
-
-### `POST /api/projects/:id/references`
-
-Save one video as a reference.
-
-```json
-{
-  "sourceSetId": 1,
-  "videoId": "abc123xyz89",
-  "tags": ["hook", "editing"]
-}
-```
-
-### `POST /api/projects/:id/references/import-video`
-
-Import a direct YouTube video as a saved reference.
-
-```json
-{
-  "sourceSetId": 1,
-  "videoUrl": "https://www.youtube.com/watch?v=abc123xyz89"
-}
-```

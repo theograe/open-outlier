@@ -19,7 +19,6 @@ const client = new OpenOutlierClient({
 });
 
 const results = await client.searchReferences(1, {
-  sourceSetId: 1,
   contentType: "long",
   minScore: 3,
   sort: "momentum",
@@ -31,10 +30,10 @@ console.log(results);
 
 ## Main use cases
 
-- create and manage projects
-- discover channels
+- create and manage collections
+- discover tracked channels
 - trigger scans
 - search the outlier feed
-- save references
+- save references into collections
 
 If your local OpenOutlier instance is running without `API_KEY`, you can pass an empty string for `apiKey`.

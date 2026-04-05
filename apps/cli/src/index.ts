@@ -6,8 +6,8 @@ function usage() {
   console.log(`OpenOutlier CLI
 
 Commands:
-  discover --source-set <id> [--query <text>] [--limit <n>] [--auto-attach]
-  import-video --project <id> --video <url> [--source-set <id>]
+  discover-tracked [--query <text>] [--limit <n>] [--auto-attach]
+  import-video --collection <id> --video <url>
   scan --list <id>
 
 Environment:
@@ -43,16 +43,12 @@ async function main() {
     apiKey,
   });
 
-  if (command === "discover") {
-    const sourceSetId = Number(readFlag("--source-set"));
-    if (!sourceSetId) {
-      throw new Error("discover requires --source-set.");
-    }
+  if (command === "discover-tracked") {
     const query = readFlag("--query");
     const limit = readFlag("--limit") ? Number(readFlag("--limit")) : undefined;
     const autoAttach = hasFlag("--auto-attach");
 
-    const result = await client.discoverChannels(sourceSetId, {
+    const result = await client.discoverTrackedChannels({
       query,
       limit,
       autoAttach,
@@ -62,16 +58,14 @@ async function main() {
   }
 
   if (command === "import-video") {
-    const projectId = Number(readFlag("--project"));
-    const sourceSetId = readFlag("--source-set") ? Number(readFlag("--source-set")) : undefined;
+    const collectionId = Number(readFlag("--collection"));
     const videoUrl = readFlag("--video");
 
-    if (!projectId || !videoUrl) {
-      throw new Error("import-video requires --project and --video.");
+    if (!collectionId || !videoUrl) {
+      throw new Error("import-video requires --collection and --video.");
     }
 
-    const result = await client.importReferenceVideo(projectId, {
-      sourceSetId,
+    const result = await client.importReferenceVideo(collectionId, {
       videoUrl,
     });
     console.log(JSON.stringify(result, null, 2));
