@@ -508,8 +508,9 @@ export default function DiscoverPage() {
                       {filters.seedChannelId === ALL_TRACKED_CHANNELS ? "Tracked niche" : "Tracked channel"}
                     </span>
                   </span>
-                  <button
-                    type="button"
+                  <span
+                    role="button"
+                    tabIndex={0}
                     className="discover-source-clear"
                     aria-label="Clear selected channel"
                     onClick={(event) => {
@@ -517,9 +518,17 @@ export default function DiscoverPage() {
                       updateFilter("seedChannelId", "");
                       setSourceMenuOpen(false);
                     }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        updateFilter("seedChannelId", "");
+                        setSourceMenuOpen(false);
+                      }
+                    }}
                   >
                     ×
-                  </button>
+                  </span>
                   <span className="discover-source-caret">⌄</span>
                 </>
               ) : (

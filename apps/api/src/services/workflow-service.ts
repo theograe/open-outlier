@@ -434,7 +434,11 @@ export class WorkflowService {
         channels.id AS channelId,
         channels.name AS channelName,
         channels.subscriber_count AS channelSubscribers,
-        channels.median_views AS channelMedianViews
+        CASE
+          WHEN channels.median_views > 0 THEN channels.median_views
+          WHEN videos.outlier_score > 0 THEN CAST(ROUND(videos.views / videos.outlier_score) AS INTEGER)
+          ELSE 0
+        END AS channelMedianViews
       FROM project_references
       INNER JOIN videos ON videos.id = project_references.video_id
       INNER JOIN channels ON channels.id = videos.channel_id

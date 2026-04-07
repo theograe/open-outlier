@@ -2,7 +2,7 @@ import cron, { type ScheduledTask } from "node-cron";
 import { computeMomentumScore, getContentType, parseDurationToSeconds } from "@openoutlier/core";
 import { db, getSetting, upsertSetting } from "../db.js";
 import { config } from "../config.js";
-import { isoNow, median, subtractDays } from "../utils.js";
+import { buildRollingMedianMap, isoNow, median, subtractDays } from "../utils.js";
 import { YoutubeClient } from "./youtube.js";
 
 type ScanStatus = {
@@ -281,6 +281,13 @@ export class ScanService {
     const viewValues = videos.map((video) => video.views).filter((views) => views > 0);
     const medianViews = median(viewValues);
     const safeMedian = medianViews > 0 ? medianViews : 1;
+    const rollingMedianByVideoId = buildRollingMedianMap(
+      videos.map((video) => ({
+        id: video.id,
+        views: video.views,
+        publishedAt: video.publishedAt,
+      })),
+    );
 
     const transaction = db.transaction(() => {
       for (const video of videos) {
@@ -290,9 +297,12 @@ export class ScanService {
           (Date.now() - new Date(video.publishedAt ?? now).getTime()) / (1000 * 60 * 60 * 24),
           1,
         );
-        const outlierScore = Number((video.views / safeMedian).toFixed(4));
+        const rollingMedian = rollingMedianByVideoId.get(video.id) ?? 0;
+        const baselineViews = rollingMedian > 0 ? rollingMedian : safeMedian;
+        const safeBaseline = Math.max(baselineViews, 1);
+        const outlierScore = Number((video.views / safeBaseline).toFixed(4));
         const viewVelocity = Number((video.views / daysSincePublished).toFixed(4));
-        const momentumScore = computeMomentumScore(outlierScore, viewVelocity, channel.subscriberCount, medianViews);
+        const momentumScore = computeMomentumScore(outlierScore, viewVelocity, channel.subscriberCount, safeBaseline);
         const engagementRatio = video.views > 0 ? Number(((video.likes + video.comments) / video.views).toFixed(4)) : 0;
 
         insertVideo.run(

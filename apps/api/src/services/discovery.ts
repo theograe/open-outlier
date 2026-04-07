@@ -3,7 +3,7 @@ import imghash from "imghash";
 import { db, getSetting, upsertSetting } from "../db.js";
 import { EmbeddingsService } from "./embeddings-service.js";
 import { YoutubeClient } from "./youtube.js";
-import { isoNow, median, subtractDays } from "../utils.js";
+import { buildRollingMedianMap, isoNow, median, subtractDays } from "../utils.js";
 
 export type DiscoverQuery = {
   listId?: number;
@@ -284,14 +284,14 @@ function upsertVideoRecord(
     comments: number;
     duration: string | null;
   },
-  channelStats: { medianViews: number },
+  channelStats: { baselineViews: number },
 ) {
   if (!video.channelId) {
     return;
   }
 
   const durationSeconds = parseDurationToSeconds(video.duration);
-  const safeMedian = Math.max(channelStats.medianViews || 0, 1);
+  const safeMedian = Math.max(channelStats.baselineViews || 0, 1);
   const publishedTime = video.publishedAt ? new Date(video.publishedAt).getTime() : Date.now();
   const daysSincePublished = Math.max((Date.now() - publishedTime) / (1000 * 60 * 60 * 24), 1);
   const outlierScore = Number((video.views / safeMedian).toFixed(4));
@@ -370,6 +370,13 @@ export async function ingestSearchQuery(searchText: string, days = 365): Promise
       const sampleVideoIds = uploadIds.slice(0, 20);
       const channelVideos = sampleVideoIds.length > 0 ? await youtubeClient.fetchVideos(sampleVideoIds) : [];
       medianViews = median(channelVideos.map((video) => Math.max(video.views, 0)).filter((value) => value > 0));
+      const rollingMedianByVideoId = buildRollingMedianMap(
+        channelVideos.map((video) => ({
+          id: video.id,
+          views: video.views,
+          publishedAt: video.publishedAt,
+        })),
+      );
 
       upsertChannelRecord({
         channelId: channel.channelId,
@@ -382,7 +389,9 @@ export async function ingestSearchQuery(searchText: string, days = 365): Promise
       });
 
       for (const channelVideo of channelVideos) {
-        upsertVideoRecord(channelVideo, { medianViews });
+        const rollingMedian = rollingMedianByVideoId.get(channelVideo.id) ?? 0;
+        const baselineViews = rollingMedian > 0 ? rollingMedian : Math.max(medianViews, 1);
+        upsertVideoRecord(channelVideo, { baselineViews });
       }
       warmThumbnailHashes(channelVideos, 30);
     } else {
@@ -421,7 +430,7 @@ export async function ingestSearchQuery(searchText: string, days = 365): Promise
 
     const fallbackMedian = channelMedians.get(video.channelId) ?? 0;
     const effectiveMedian = fallbackMedian > 0 ? fallbackMedian : Math.max(Math.round(video.views / 2), 1);
-    upsertVideoRecord(video, { medianViews: effectiveMedian });
+    upsertVideoRecord(video, { baselineViews: effectiveMedian });
   }
 }
 
@@ -838,7 +847,11 @@ export async function listDiscoverOutliers(query: DiscoverQuery) {
       channels.id AS channelId,
       channels.handle AS channelHandle,
       channels.subscriber_count AS channelSubscribers,
-      channels.median_views AS channelMedianViews,
+      CASE
+        WHEN channels.median_views > 0 THEN channels.median_views
+        WHEN videos.outlier_score > 0 THEN CAST(ROUND(videos.views / videos.outlier_score) AS INTEGER)
+        ELSE 0
+      END AS channelMedianViews,
       videos.views,
       videos.likes,
       videos.comments,
