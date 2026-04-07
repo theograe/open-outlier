@@ -35,6 +35,7 @@ const discoverQuerySchema = z.object({
   maxVelocity: z.coerce.number().optional(),
   minDurationSeconds: z.coerce.number().optional(),
   maxDurationSeconds: z.coerce.number().optional(),
+  forceRefresh: z.coerce.boolean().optional(),
 });
 
 export async function registerDiscoverRoutes(app: FastifyInstance): Promise<void> {
@@ -50,7 +51,7 @@ export async function registerDiscoverRoutes(app: FastifyInstance): Promise<void
         }
       | undefined;
 
-    if (query.search?.trim() && shouldRefreshSearchQuery(query.search)) {
+    if (query.search?.trim() && (query.forceRefresh || shouldRefreshSearchQuery(query.search))) {
       try {
         await ingestSearchQuery(query.search, query.days);
         markSearchQueryRefreshed(query.search);
@@ -65,7 +66,7 @@ export async function registerDiscoverRoutes(app: FastifyInstance): Promise<void
       }
     }
 
-    if (query.seedChannelId && shouldRefreshSeedChannelDiscovery(query.seedChannelId, query.days)) {
+    if (query.seedChannelId && (query.forceRefresh || shouldRefreshSeedChannelDiscovery(query.seedChannelId, query.days))) {
       try {
         await ingestSeedChannelDiscovery(query.seedChannelId, query.days);
         markSeedChannelDiscoveryRefreshed(query.seedChannelId, query.days);
@@ -80,7 +81,7 @@ export async function registerDiscoverRoutes(app: FastifyInstance): Promise<void
       }
     }
 
-    if (query.trackedMode && shouldRefreshTrackedChannelDiscovery(query.days)) {
+    if (query.trackedMode && (query.forceRefresh || shouldRefreshTrackedChannelDiscovery(query.days))) {
       try {
         await ingestTrackedChannelDiscovery(query.days);
         markTrackedChannelDiscoveryRefreshed(query.days);
@@ -97,7 +98,7 @@ export async function registerDiscoverRoutes(app: FastifyInstance): Promise<void
 
     if (query.generalMode && query.projectId === undefined) {
       const existingPool = db.prepare("SELECT COUNT(*) AS total FROM general_discovery_channels").get() as { total: number };
-      if ((existingPool.total ?? 0) === 0) {
+      if (query.forceRefresh || (existingPool.total ?? 0) === 0) {
         try {
           await generalDiscovery.ensureFreshPool();
         } catch (error) {
@@ -116,7 +117,7 @@ export async function registerDiscoverRoutes(app: FastifyInstance): Promise<void
 
     if (query.projectId !== undefined) {
       const existingPool = db.prepare("SELECT COUNT(*) AS total FROM general_discovery_channels").get() as { total: number };
-      if ((existingPool.total ?? 0) === 0) {
+      if (query.forceRefresh || (existingPool.total ?? 0) === 0) {
         try {
           await generalDiscovery.ensureFreshPool();
         } catch (error) {

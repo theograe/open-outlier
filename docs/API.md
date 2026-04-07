@@ -75,6 +75,18 @@ Save a video into a collection.
 }
 ```
 
+### `DELETE /api/collections/:id/references/:referenceId`
+
+Remove one saved reference from a collection.
+
+### `GET /api/collections/:id/export?format=json|csv`
+
+Export a collection.
+
+Returns:
+- JSON export for agent workflows and automations
+- CSV export for spreadsheet-style review
+
 ## Discovery
 
 ### `GET /api/discover/outliers`
@@ -162,3 +174,5 @@ Fetch current scan status.
    - `trackedMode=true`
    - `seedChannelId=...`
 5. Save strong results with `POST /api/collections/:id/references`
+6. Review or remove saved items in the collection view
+7. Export the collection when you want to hand it off to another workflow

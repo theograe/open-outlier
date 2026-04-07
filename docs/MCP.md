@@ -16,6 +16,8 @@ The MCP server exposes OpenOutlier as a small research toolset.
 - `add_tracked_channel`
 - `search_references`
 - `save_reference`
+- `remove_reference`
+- `export_collection`
 - `import_reference_video`
 - `trigger_scan`
 - `get_scan_status`
@@ -28,3 +30,5 @@ The MCP server exposes OpenOutlier as a small research toolset.
 4. trigger a scan
 5. search references
 6. save the strongest references
+7. remove weak saves if needed
+8. export the collection for downstream agents

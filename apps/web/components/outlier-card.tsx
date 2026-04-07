@@ -63,9 +63,12 @@ export function OutlierCard({
   onOpenSave,
   onTrackChannel,
   onDismiss,
+  onRemove,
   saveState = "idle",
   trackState = "idle",
   dismissState = "idle",
+  removeState = "idle",
+  topRightTooltip = "Hide video",
   similarHref,
   similarChannelsHref,
 }: {
@@ -73,9 +76,12 @@ export function OutlierCard({
   onOpenSave?: (video: Video) => void;
   onTrackChannel?: (video: Video) => void;
   onDismiss?: (video: Video) => void;
+  onRemove?: (video: Video) => void;
   saveState?: "idle" | "saving" | "saved";
   trackState?: "idle" | "saving" | "saved";
   dismissState?: "idle" | "saving";
+  removeState?: "idle" | "saving";
+  topRightTooltip?: string;
   similarHref?: string;
   similarChannelsHref?: string;
 }) {
@@ -96,23 +102,29 @@ export function OutlierCard({
           )}
         </Link>
         <div className="outlier-hover">
+          {onDismiss || onRemove ? (
           <div className="outlier-hover-corner outlier-hover-top-right">
-            <span className="tooltip-anchor" data-tooltip="Hide video">
+            <span className="tooltip-anchor" data-tooltip={topRightTooltip}>
               <button
                 type="button"
                 className="hover-icon-button hover-icon-button-dismiss"
-                disabled={dismissState !== "idle"}
+                disabled={onRemove ? removeState !== "idle" : dismissState !== "idle"}
                 onClick={() => {
-                  if (dismissState === "idle") {
+                  if (onRemove && removeState === "idle") {
+                    onRemove(video);
+                    return;
+                  }
+                  if (onDismiss && dismissState === "idle") {
                     onDismiss?.(video);
                   }
                 }}
-                aria-label="Hide video forever"
+                aria-label={topRightTooltip}
               >
-                {dismissState === "saving" ? "…" : "×"}
+                {(onRemove ? removeState : dismissState) === "saving" ? "…" : "×"}
               </button>
             </span>
           </div>
+          ) : null}
           <div className="outlier-hover-corner outlier-hover-center">
             <Link href={browseHref} className="hover-action-button">
               View similar

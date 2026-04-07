@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "../../lib/api";
 import { OutlierCard } from "../../components/outlier-card";
 import { ChannelAvatar } from "../../components/channel-avatar";
@@ -245,6 +245,7 @@ export default function DiscoverPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [warning, setWarning] = useState<DiscoverWarning | null>(null);
   const [pendingVideoIds, setPendingVideoIds] = useState<string[]>([]);
@@ -284,6 +285,37 @@ export default function DiscoverPage() {
     return params.toString();
   }, [filters]);
 
+  const fetchDiscover = useCallback(async (forceRefresh = false) => {
+    setLoading(true);
+    if (forceRefresh) {
+      setRefreshing(true);
+      setVideos([]);
+      setTotal(0);
+      setWarning(null);
+    }
+    setError("");
+
+    const params = new URLSearchParams(query);
+    if (forceRefresh) {
+      params.set("forceRefresh", "true");
+    }
+
+    try {
+      const discover = await apiFetch<DiscoverPayload>(`/api/discover/outliers?${params.toString()}`);
+      setVideos(discover.videos);
+      setTotal(discover.total);
+      setWarning(discover.warning ?? null);
+    } catch (fetchError) {
+      setWarning(null);
+      setError(fetchError instanceof Error ? fetchError.message : "Failed to load outliers.");
+    } finally {
+      setLoading(false);
+      if (forceRefresh) {
+        setRefreshing(false);
+      }
+    }
+  }, [query]);
+
   useEffect(() => {
     void Promise.all([
       apiFetch<Collection[]>("/api/collections"),
@@ -298,20 +330,8 @@ export default function DiscoverPage() {
   }, []);
 
   useEffect(() => {
-    setLoading(true);
-    setError("");
-    void apiFetch<DiscoverPayload>(`/api/discover/outliers?${query}`)
-      .then((discover) => {
-        setVideos(discover.videos);
-        setTotal(discover.total);
-        setWarning(discover.warning ?? null);
-      })
-      .catch((fetchError) => {
-        setWarning(null);
-        setError(fetchError instanceof Error ? fetchError.message : "Failed to load outliers.");
-      })
-      .finally(() => setLoading(false));
-  }, [query]);
+    void fetchDiscover(false);
+  }, [fetchDiscover]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -694,6 +714,16 @@ export default function DiscoverPage() {
               ) : null}
             </div>
           </form>
+          <button
+            type="button"
+            className="button secondary"
+            disabled={refreshing}
+            onClick={() => {
+              void fetchDiscover(true);
+            }}
+          >
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </button>
           <span className="discover-results-text">{total.toLocaleString()} results</span>
         </div>
       </section>

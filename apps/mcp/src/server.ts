@@ -110,6 +110,22 @@ server.registerTool("save_reference", {
   }),
 }, async ({ collectionId, ...input }) => textResult(await client.saveReference(collectionId, input)));
 
+server.registerTool("remove_reference", {
+  description: "Remove one saved video from a collection.",
+  inputSchema: z.object({
+    collectionId: z.number().int(),
+    referenceId: z.number().int(),
+  }),
+}, async ({ collectionId, referenceId }) => textResult(await client.removeReference(collectionId, referenceId)));
+
+server.registerTool("export_collection", {
+  description: "Export a collection as JSON or CSV.",
+  inputSchema: z.object({
+    collectionId: z.number().int(),
+    format: z.enum(["json", "csv"]).default("json"),
+  }),
+}, async ({ collectionId, format }) => textResult(await client.exportCollection(collectionId, format)));
+
 server.registerTool("import_reference_video", {
   description: "Import a single YouTube video directly as a saved reference.",
   inputSchema: z.object({

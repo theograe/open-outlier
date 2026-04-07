@@ -404,6 +404,17 @@ export class WorkflowService {
     return { id: Number(result.id), videoId: input.videoId };
   }
 
+  removeReference(projectId: number, referenceId: number) {
+    const result = db.prepare(`
+      DELETE FROM project_references
+      WHERE project_id = ? AND id = ?
+    `).run(projectId, referenceId);
+
+    if (result.changes === 0) {
+      throw new Error("Reference not found.");
+    }
+  }
+
   listReferences(projectId: number) {
     const rows = db.prepare(`
       SELECT
@@ -450,6 +461,23 @@ export class WorkflowService {
       publishedAt: row.publishedAt ? String(row.publishedAt) : null,
       createdAt: String(row.createdAt),
     }));
+  }
+
+  exportCollection(projectId: number) {
+    const project = this.getProject(projectId);
+    const references = this.listReferences(projectId);
+
+    return {
+      collection: {
+        id: project.id,
+        name: project.name,
+        niche: project.niche,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+      },
+      references,
+      exportedAt: new Date().toISOString(),
+    };
   }
 
   async importReferenceVideo(projectId: number, videoInput: string) {

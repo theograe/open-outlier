@@ -126,6 +126,41 @@ paths:
       responses:
         "201":
           description: Reference saved
+  /api/collections/{id}/references/{referenceId}:
+    delete:
+      summary: Remove one saved reference
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+        - in: path
+          name: referenceId
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Reference removed
+  /api/collections/{id}/export:
+    get:
+      summary: Export a collection
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+        - in: query
+          name: format
+          required: false
+          schema:
+            type: string
+            enum: [json, csv]
+      responses:
+        "200":
+          description: Collection export returned
   /api/collections/{id}/references/import-video:
     post:
       summary: Import one video as a reference

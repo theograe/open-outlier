@@ -102,7 +102,7 @@ NEXT_PUBLIC_OPENOUTLIER_API_KEY=choose-a-long-random-string
 - `POST /api/collections/:id/references`
 - `POST /api/scan`
 
-More detail lives in `docs/API.md`, with agent guidance in `docs/AGENTS.md`.
+More detail lives in `docs/API.md`, with agent guidance in `AGENTS.md` and `docs/AGENTS.md`.
 
 ## Agent integrations
 

@@ -1,6 +1,6 @@
 export type OpenOutlierClientOptions = {
   baseUrl: string;
-  apiKey: string;
+  apiKey?: string;
   fetch?: typeof fetch;
 };
 
@@ -24,7 +24,7 @@ export class OpenOutlierClient {
 
   constructor(options: OpenOutlierClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, "");
-    this.apiKey = options.apiKey;
+    this.apiKey = options.apiKey ?? "";
     this.fetchImpl = options.fetch ?? fetch;
   }
 
@@ -106,6 +106,30 @@ export class OpenOutlierClient {
       method: "POST",
       body: JSON.stringify(input),
     });
+  }
+
+  removeReference(collectionId: number, referenceId: number) {
+    return this.request<void>(`/api/collections/${collectionId}/references/${referenceId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async exportCollection(collectionId: number, format: "json" | "csv" = "json") {
+    const response = await this.fetchImpl(`${this.baseUrl}/api/collections/${collectionId}/export?format=${format}`, {
+      headers: {
+        ...(this.apiKey ? { "x-api-key": this.apiKey } : {}),
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+
+    if (format === "json") {
+      return response.json() as Promise<Record<string, unknown>>;
+    }
+
+    return response.text();
   }
 
   importReferenceVideo(collectionId: number, input: { videoId?: string | null; videoUrl?: string | null }) {

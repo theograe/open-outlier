@@ -159,6 +159,35 @@ export async function registerWorkflowRoutes(app: FastifyInstance, scanService: 
     return workflows.listReferences(projectId);
   });
 
+  app.delete("/api/projects/:id/references/:referenceId", async (request, reply) => {
+    const { id, referenceId } = z.object({
+      id: z.coerce.number().int(),
+      referenceId: z.coerce.number().int(),
+    }).parse(request.params);
+
+    try {
+      workflows.removeReference(id, referenceId);
+      reply.code(204);
+      return null;
+    } catch {
+      return reply.notFound("Reference not found.");
+    }
+  });
+  app.delete("/api/collections/:id/references/:referenceId", async (request, reply) => {
+    const { id, referenceId } = z.object({
+      id: z.coerce.number().int(),
+      referenceId: z.coerce.number().int(),
+    }).parse(request.params);
+
+    try {
+      workflows.removeReference(id, referenceId);
+      reply.code(204);
+      return null;
+    } catch {
+      return reply.notFound("Reference not found.");
+    }
+  });
+
   app.post("/api/projects/:id/references", async (request, reply) => {
     const projectId = Number((request.params as { id: string }).id);
     const body = z.object({
@@ -207,5 +236,82 @@ export async function registerWorkflowRoutes(app: FastifyInstance, scanService: 
     const imported = await workflows.importReferenceVideo(projectId, body.videoUrl ?? body.videoId ?? "");
     reply.code(201);
     return imported;
+  });
+
+  app.get("/api/projects/:id/export", async (request, reply) => {
+    const { id, format } = z.object({
+      id: z.coerce.number().int(),
+      format: z.enum(["json", "csv"]).default("json"),
+    }).parse({
+      ...(request.params as Record<string, unknown>),
+      ...(request.query as Record<string, unknown>),
+    });
+
+    const exported = workflows.exportCollection(id);
+
+    if (format === "csv") {
+      const rows = [
+        ["videoId", "title", "channelName", "outlierScore", "views", "durationSeconds", "publishedAt", "kind", "notes", "tags", "createdAt"],
+        ...exported.references.map((reference) => [
+          reference.videoId,
+          reference.title,
+          reference.channelName,
+          String(reference.outlierScore),
+          String(reference.views),
+          String(reference.durationSeconds),
+          reference.publishedAt ?? "",
+          reference.kind,
+          reference.notes ?? "",
+          reference.tags.join("|"),
+          reference.createdAt,
+        ]),
+      ];
+      const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, "\"\"")}"`).join(",")).join("\n");
+      reply.header("content-type", "text/csv; charset=utf-8");
+      reply.header("content-disposition", `attachment; filename="collection-${id}.csv"`);
+      return reply.send(csv);
+    }
+
+    reply.header("content-type", "application/json; charset=utf-8");
+    reply.header("content-disposition", `attachment; filename="collection-${id}.json"`);
+    return exported;
+  });
+  app.get("/api/collections/:id/export", async (request, reply) => {
+    const { id, format } = z.object({
+      id: z.coerce.number().int(),
+      format: z.enum(["json", "csv"]).default("json"),
+    }).parse({
+      ...(request.params as Record<string, unknown>),
+      ...(request.query as Record<string, unknown>),
+    });
+
+    const exported = workflows.exportCollection(id);
+
+    if (format === "csv") {
+      const rows = [
+        ["videoId", "title", "channelName", "outlierScore", "views", "durationSeconds", "publishedAt", "kind", "notes", "tags", "createdAt"],
+        ...exported.references.map((reference) => [
+          reference.videoId,
+          reference.title,
+          reference.channelName,
+          String(reference.outlierScore),
+          String(reference.views),
+          String(reference.durationSeconds),
+          reference.publishedAt ?? "",
+          reference.kind,
+          reference.notes ?? "",
+          reference.tags.join("|"),
+          reference.createdAt,
+        ]),
+      ];
+      const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, "\"\"")}"`).join(",")).join("\n");
+      reply.header("content-type", "text/csv; charset=utf-8");
+      reply.header("content-disposition", `attachment; filename="collection-${id}.csv"`);
+      return reply.send(csv);
+    }
+
+    reply.header("content-type", "application/json; charset=utf-8");
+    reply.header("content-disposition", `attachment; filename="collection-${id}.json"`);
+    return exported;
   });
 }
