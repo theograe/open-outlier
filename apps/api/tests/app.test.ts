@@ -68,6 +68,44 @@ describe("app auth and legacy list routes", () => {
     }
   }, 15000);
 
+  it("generates PullUpHoops ideas from basketball shorts outliers", async () => {
+    const { buildApp } = await import("../src/app.js");
+    const { db } = await import("../src/db.js");
+    const app = buildApp();
+
+    try {
+      db.prepare(`
+        INSERT INTO channels (id, name, handle, subscriber_count, thumbnail_url, uploads_playlist_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run("UC_hoops_test_01", "Hoops Test", "@hoopstest", 1200, null, "UU_hoops_test_01");
+      db.prepare(`
+        INSERT INTO videos (id, channel_id, title, published_at, views, content_type, outlier_score)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run("nba_short_01", "UC_hoops_test_01", "The forgotten LeBron playoff moment", new Date().toISOString(), 2500000, "short", 12.5);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/pulluphoops/ideas?limit=3",
+        headers: { "x-api-key": "test-api-key" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.sourceCount).toBe(1);
+      expect(body.ideas[0]).toMatchObject({
+        angle: "forgotten story / hidden context",
+        seed: {
+          videoId: "nba_short_01",
+          channel: "Hoops Test",
+        },
+      });
+      expect(body.ideas[0].hooks.length).toBeGreaterThan(0);
+      expect(body.ideas[0].clipSearches.join(" ")).toContain("forgotten lebron playoff full play");
+    } finally {
+      await app.close();
+    }
+  }, 15000);
+
   it("removes a channel from a list using the legacy compatibility route", async () => {
     const { buildApp } = await import("../src/app.js");
     const { db } = await import("../src/db.js");

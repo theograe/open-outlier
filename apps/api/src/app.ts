@@ -15,6 +15,7 @@ import { registerAgentRoutes } from "./routes/agent.js";
 import { registerWorkflowRoutes } from "./routes/workflows.js";
 import { registerImageRoutes } from "./routes/images.js";
 import { registerTrackedChannelRoutes } from "./routes/tracked-channels.js";
+import { registerPulluphoopsRoutes } from "./routes/pulluphoops.js";
 
 export function buildApp() {
   initializeDatabase();
@@ -59,6 +60,7 @@ export function buildApp() {
   void registerWorkflowRoutes(app, scanService);
   void registerImageRoutes(app);
   void registerTrackedChannelRoutes(app, scanService);
+  void registerPulluphoopsRoutes(app);
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof ZodError) {
