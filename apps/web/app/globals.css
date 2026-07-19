@@ -307,6 +307,10 @@ body {
 .outlier-tile:hover .outlier-hover,
 .outlier-tile:focus-within .outlier-hover {
   opacity: 1;
+}
+
+.outlier-hover-corner,
+.outlier-hover-center {
   pointer-events: auto;
 }
 
